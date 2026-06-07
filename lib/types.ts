@@ -108,7 +108,10 @@ export interface ScoutOnboarding {
 }
 
 export type DocumentType =
+  | 'offer_letter'
+  | 'internship_offer'
   | 'appointment_letter'
+  | 'internship_appointment'
   | 'freelance_agreement'
   | 'appraisal'
   | 'probation_confirmation'
@@ -137,7 +140,10 @@ export const DEPT_DISPLAY: Record<string, string> = {
 }
 
 export const DOC_TYPE_LABELS: Record<string, string> = {
+  offer_letter: 'Offer Letter',
+  internship_offer: 'Internship Offer Letter',
   appointment_letter: 'Appointment Letter',
+  internship_appointment: 'Internship Appointment Letter',
   freelance_agreement: 'Freelance Agreement',
   appraisal: 'Appraisal Letter',
   probation_confirmation: 'Probation Confirmation',
@@ -146,6 +152,5 @@ export const DOC_TYPE_LABELS: Record<string, string> = {
   internship_completion: 'Internship Completion Certificate',
   relieving_letter: 'Relieving Letter',
   warning_letter: 'Warning Letter',
-  offer_letter: 'Offer Letter',
   other: 'Other',
 }
