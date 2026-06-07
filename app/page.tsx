@@ -333,6 +333,31 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
     phone: employee.phone || '',
   })
   const [saving, setSaving] = useState(false)
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const [driveFolderUrl, setDriveFolderUrl] = useState(ep?.drive_folder_url || '')
+
+  async function createDriveFolder() {
+    setCreatingFolder(true)
+    try {
+      const res = await fetch('https://script.google.com/macros/s/AKfycbyVbz5RdpIuwkkyqrvccttilVhxKB71BXWblIC7jrLa4k8G6pqJLMSVWzdE11iq17yvaA/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create_folder', folderName: employee.full_name, parentFolder: 'Employees' })
+      })
+      const data = await res.json()
+      if (data?.folderLink) {
+        await supabase.from('employee_profiles').update({ drive_folder_url: data.folderLink }).eq('id', ep?.id || '')
+        setDriveFolderUrl(data.folderLink)
+        showToast('Drive folder created.')
+        onRefresh()
+      } else {
+        showToast('Drive folder creation failed.', 'fail')
+      }
+    } catch {
+      showToast('Drive API error.', 'fail')
+    }
+    setCreatingFolder(false)
+  }
 
   async function save() {
     setSaving(true)
@@ -366,6 +391,7 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
     ['Email', employee.email],
     ['Phone', employee.phone || '--'],
   ]
+  const hasDriveFolder = !!(driveFolderUrl || ep?.drive_folder_url)
 
   return (
     <div>
@@ -380,6 +406,7 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
         )}
       </div>
       {!editing ? (
+        <>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {rows.map(([label, val]) => (
             <div key={label} style={{ background: 'var(--bg3)', borderRadius: 8, padding: '10px 12px' }}>
@@ -388,6 +415,21 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
             </div>
           ))}
         </div>
+        <div style={{ marginTop: 12, padding: '12px 14px', background: 'var(--bg3)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 3 }}>Drive Folder</div>
+            {hasDriveFolder
+              ? <a href={driveFolderUrl || ep?.drive_folder_url || '#'} target="_blank" rel="noreferrer" style={{ fontSize: 13, color: 'var(--red)', textDecoration: 'none' }}>Open folder</a>
+              : <div style={{ fontSize: 13, color: 'var(--text3)' }}>No folder linked</div>
+            }
+          </div>
+          {!hasDriveFolder && (
+            <button className="btn btn-ghost btn-sm" disabled={creatingFolder} onClick={createDriveFolder}>
+              {creatingFolder ? 'Creating...' : 'Create Drive folder'}
+            </button>
+          )}
+        </div>
+        </>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="field-row">
@@ -650,9 +692,11 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
       const ext = uploadForm.file!.name.split('.').pop()
       const fname = `${uploadForm.document_type}-${employee.full_name.replace(/\s+/g,'-').toLowerCase()}-${Date.now()}.${ext}`
       let driveLink: string | null = null
-      // Try Drive upload if employee has a folder
-      const { data: obData } = await supabase.from('scout_onboarding').select('drive_folder_url').eq('employee_id', employee.id).maybeSingle()
-      const folderMatch = obData?.drive_folder_url ? obData.drive_folder_url.match(/folders\/([a-zA-Z0-9_-]+)/) : null
+      // Check employee_profiles first, then onboarding record
+      const { data: epData } = await supabase.from('employee_profiles').select('drive_folder_url').eq('id', employee.id).maybeSingle()
+      const { data: obData } = !epData?.drive_folder_url ? await supabase.from('scout_onboarding').select('drive_folder_url').eq('employee_id', employee.id).maybeSingle() : { data: null }
+      const folderUrl = epData?.drive_folder_url || obData?.drive_folder_url || null
+      const folderMatch = folderUrl ? folderUrl.match(/folders\/([a-zA-Z0-9_-]+)/) : null
       const folderId = folderMatch ? folderMatch[1] : null
       if (folderId) {
         try {
@@ -938,12 +982,10 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: { employees
     setGenerating(true)
     const emp = employees.find(e => e.id === form.profile_id)
     const ep = emp?.employee_profiles as EmployeeProfile | null
-    // Get employee's drive folder from onboarding record
-    const { data: obData } = await supabase.from('scout_onboarding').select('drive_folder_url').eq('employee_id', form.profile_id).maybeSingle()
-    // Also check candidate onboarding
-    const { data: obData2 } = !obData ? await supabase.from('scout_onboarding').select('drive_folder_url,candidate_id').maybeSingle() : { data: null }
-    const driveFolderUrl = obData?.drive_folder_url || obData2?.drive_folder_url || null
-    // Extract folder ID from URL if available
+    // Check employee_profiles first, then onboarding record
+    const { data: epFolder } = await supabase.from('employee_profiles').select('drive_folder_url').eq('id', form.profile_id).maybeSingle()
+    const { data: obFolder } = !epFolder?.drive_folder_url ? await supabase.from('scout_onboarding').select('drive_folder_url').eq('employee_id', form.profile_id).maybeSingle() : { data: null }
+    const driveFolderUrl = epFolder?.drive_folder_url || obFolder?.drive_folder_url || null
     const driveFolderIdMatch = driveFolderUrl ? driveFolderUrl.match(/folders\/([a-zA-Z0-9_-]+)/) : null
     const driveFolderId = driveFolderIdMatch ? driveFolderIdMatch[1] : null
 
