@@ -438,7 +438,7 @@ function PersonCompensation({ employee, showToast }: { employee: Employee; showT
 
   useEffect(() => {
     const table = isFreelancer ? 'freelancer_rate_cards' : 'employee_compensation'
-    supabase.from(table as any).select('*').eq('profile_id', employee.id).order('effective_from', { ascending: false }).then(({ data }) => {
+    ;(supabase.from(table as any) as any).select('*').eq('profile_id', employee.id).order('effective_from', { ascending: false }).then(({ data }: any) => {
       setRecords(data || [])
       setLoading(false)
     })
@@ -462,7 +462,7 @@ function PersonCompensation({ employee, showToast }: { employee: Employee; showT
       effective_from: form.effective_from,
       notes: form.notes || null,
     }
-    const { error } = await supabase.from(table as any).insert(payload)
+    const { error } = await supabase.from(table as any).insert(payload as any)
     setSaving(false)
     if (error) { showToast('Failed to save.', 'fail'); return }
     showToast('Saved.')
