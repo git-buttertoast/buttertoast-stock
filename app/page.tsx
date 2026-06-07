@@ -47,8 +47,8 @@ export default function StockApp() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { setLoading(false); return }
       const { data: profile } = await supabase.from('profiles').select('id,full_name').eq('id', session.user.id).single()
-      const { data: ur } = await supabase.from('user_roles').select('roles(name)').eq('user_id', session.user.id).single()
-      const role = (ur as any)?.roles?.name || 'viewer'
+      const { data: urRows } = await supabase.from('user_roles').select('roles(name)').eq('user_id', session.user.id).limit(10)
+      const role = (urRows as any)?.[0]?.roles?.name || 'viewer'
       if (!['admin', 'hr'].includes(role)) { setLoading(false); return }
       setUser({ id: session.user.id, full_name: profile?.full_name || '', role })
       setLoading(false)
@@ -74,7 +74,9 @@ export default function StockApp() {
       {/* Sidebar */}
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <img src="https://ferlauhakdbfpwfapxxw.supabase.co/storage/v1/object/public/assets/branding/logo.png" alt="" style={{ height: 28 }} />
+          <div style={{background:'#E03F2A',borderRadius:6,padding:'4px 7px',display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <img src="https://ferlauhakdbfpwfapxxw.supabase.co/storage/v1/object/public/assets/branding/logo.png" alt="" style={{height:16,filter:'brightness(0) invert(1)'}} />
+          </div>
           <div>
             <div className="sidebar-app-name">Stock</div>
             <div className="sidebar-app-sub">HR System</div>
@@ -834,8 +836,8 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
       <div className="page-body">
         {/* Pending requests */}
         {expRequests.length > 0 && (
-          <div className="card" style={{ padding: 16, marginBottom: 20, borderColor: 'rgba(232,168,56,0.3)' }}>
-            <div className="section-title" style={{ marginBottom: 10, color: 'var(--amber)' }}>Pending Experience Letter Requests ({expRequests.length})</div>
+          <div className="card" style={{ padding: 16, marginBottom: 20, borderColor: 'rgba(224,63,42,0.3)' }}>
+            <div className="section-title" style={{ marginBottom: 10, color: 'var(--red)' }}>Pending Experience Letter Requests ({expRequests.length})</div>
             {expRequests.map((r: any) => (
               <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
                 <div>
