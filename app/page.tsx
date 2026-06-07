@@ -645,24 +645,43 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
   async function uploadDoc() {
     if (!uploadForm.file) { showToast('Select a file first.', 'fail'); return }
     setUploading(true)
-    const ext = uploadForm.file.name.split('.').pop()
-    const path = `documents/${employee.id}/${Date.now()}.${ext}`
-    const { error: upErr } = await supabase.storage.from('assets').upload(path, uploadForm.file)
-    if (upErr) { showToast('Upload failed.', 'fail'); setUploading(false); return }
-    const { data: { publicUrl } } = supabase.storage.from('assets').getPublicUrl(path)
-    await supabase.from('employee_documents').insert({
-      profile_id: employee.id,
-      document_type: uploadForm.document_type,
-      label: uploadForm.label || null,
-      status: 'signed',
-      signed_copy_url: publicUrl,
-      is_current: true,
-    })
-    showToast('Document uploaded.')
-    setUploading(false)
-    setShowUpload(false)
-    const { data } = await supabase.from('employee_documents').select('*').eq('profile_id', employee.id).order('created_at', { ascending: false })
-    setDocs(data || [])
+    // Convert file to base64 for Drive upload
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const b64 = (e.target?.result as string).split(',')[1]
+      const ext = uploadForm.file!.name.split('.').pop()
+      const fname = `${uploadForm.document_type}-${employee.full_name.replace(/\s+/g,'-').toLowerCase()}-${Date.now()}.${ext}`
+      let driveLink: string | null = null
+      // Try Drive upload if employee has a folder
+      const { data: obData } = await supabase.from('scout_onboarding').select('drive_folder_url').eq('employee_id', employee.id).maybeSingle()
+      const folderMatch = obData?.drive_folder_url ? obData.drive_folder_url.match(/folders\/([a-zA-Z0-9_-]+)/) : null
+      const folderId = folderMatch ? folderMatch[1] : null
+      if (folderId) {
+        try {
+          const dr = await fetch('https://script.google.com/macros/s/AKfycbyVbz5RdpIuwkkyqrvccttilVhxKB71BXWblIC7jrLa4k8G6pqJLMSVWzdE11iq17yvaA/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'upload_file', folderId, fileName: fname, base64: b64, mimeType: uploadForm.file!.type || 'application/octet-stream' })
+          })
+          const drData = await dr.json()
+          if (drData?.fileLink) driveLink = drData.fileLink
+        } catch { /* Drive upload failed, continue without */ }
+      }
+      await supabase.from('employee_documents').insert({
+        profile_id: employee.id,
+        document_type: uploadForm.document_type,
+        label: uploadForm.label || null,
+        status: 'signed',
+        signed_copy_url: driveLink,
+        is_current: true,
+      })
+      showToast(driveLink ? 'Uploaded to Drive.' : 'Saved. No Drive folder linked for this employee.')
+      setUploading(false)
+      setShowUpload(false)
+      const { data } = await supabase.from('employee_documents').select('*').eq('profile_id', employee.id).order('created_at', { ascending: false })
+      setDocs(data || [])
+    }
+    reader.readAsDataURL(uploadForm.file)
   }
 
   return (
@@ -921,6 +940,15 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: { employees
     setGenerating(true)
     const emp = employees.find(e => e.id === form.profile_id)
     const ep = emp?.employee_profiles as EmployeeProfile | null
+    // Get employee's drive folder from onboarding record
+    const { data: obData } = await supabase.from('scout_onboarding').select('drive_folder_url').eq('employee_id', form.profile_id).maybeSingle()
+    // Also check candidate onboarding
+    const { data: obData2 } = !obData ? await supabase.from('scout_onboarding').select('drive_folder_url,candidate_id').maybeSingle() : { data: null }
+    const driveFolderUrl = obData?.drive_folder_url || obData2?.drive_folder_url || null
+    // Extract folder ID from URL if available
+    const driveFolderIdMatch = driveFolderUrl ? driveFolderUrl.match(/folders\/([a-zA-Z0-9_-]+)/) : null
+    const driveFolderId = driveFolderIdMatch ? driveFolderIdMatch[1] : null
+
     const res = await fetch('/api/generate-pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -935,17 +963,22 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: { employees
         effective_date: form.effective_date,
         notes: form.notes,
         label: form.label,
+        drive_folder_id: driveFolderId,
       })
     })
     const data = await res.json()
     setGenerating(false)
-    if (!data.url) { showToast('Generation failed.', 'fail'); return }
-    // Trigger download
+    if (!data.html) { showToast('Generation failed.', 'fail'); return }
+    // Trigger HTML download -- user opens in browser and prints to PDF
     const a = document.createElement('a')
-    a.href = data.url
-    a.download = data.filename || 'document.pdf'
+    a.href = data.html
+    a.download = data.filename || 'document.html'
     a.click()
-    showToast('Document generated and downloaded.')
+    if (data.driveLink) {
+      showToast('Generated, saved to Drive and downloaded.')
+    } else {
+      showToast('Generated and downloaded. Open in browser, print to PDF.')
+    }
     onDone()
   }
 
