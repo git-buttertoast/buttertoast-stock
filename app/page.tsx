@@ -966,25 +966,118 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
 }
 
 // ── Generate Doc Modal ──────────────────────────────────────────────────────
-function GenerateDocModal({ employees, onClose, showToast, onDone }: { employees: Employee[]; onClose: () => void; showToast: (m: string, t?: 'ok' | 'fail') => void; onDone: () => void }) {
+function GenerateDocModal({ employees, onClose, showToast, onDone }: {
+  employees: Employee[]
+  onClose: () => void
+  showToast: (m: string, t?: 'ok' | 'fail') => void
+  onDone: () => void
+}) {
   const [form, setForm] = useState({
     profile_id: '',
-    document_type: 'appointment_letter' as DocumentType,
+    document_type: 'appointment_letter' as string,
     label: '',
     signatory: 'aakash',
     effective_date: new Date().toISOString().split('T')[0],
     notes: '',
+    gender: 'neutral',
+    // offer letter
+    probation_months: '3',
+    probation_ctc: '',
+    confirmed_ctc: '',
+    reports_to_name: '',
+    // internship
+    stipend: '',
+    internship_end_date: '',
+    internship_months: '',
+    // appointment
+    monthly_ctc: '',
+    duties: '',
+    probation_end_date: '',
+    // appraisal / salary revision
+    old_ctc: '',
+    new_ctc: '',
+    // experience / relieving
+    last_working_date: '',
+    // rate card
+    rate: '',
+    rate_type: 'monthly_retainer',
   })
   const [generating, setGenerating] = useState(false)
+  const [loadingComp, setLoadingComp] = useState(false)
+  const [duties, setDuties] = useState('')
+
+  const dt = form.document_type
+  const emp = employees.find(e => e.id === form.profile_id)
+  const ep = emp?.employee_profiles as any
+
+  // When employee changes -- auto-fill from profile + fetch compensation
+  useEffect(() => {
+    if (!form.profile_id) return
+    const ep2 = emp?.employee_profiles as any
+    if (!ep2) return
+    // Auto-fill reports_to
+    if (ep2.reports_to) {
+      supabase.from('profiles').select('full_name').eq('id', ep2.reports_to).single()
+        .then(({ data }) => { if (data) setForm(f => ({ ...f, reports_to_name: data.full_name })) })
+    }
+    // Auto-fill joining date driven fields
+    if (ep2.joining_date) {
+      // probation end = 3 months from joining
+      const jd = new Date(ep2.joining_date + 'T00:00:00')
+      jd.setMonth(jd.getMonth() + 3)
+      const probEnd = jd.toISOString().split('T')[0]
+      setForm(f => ({ ...f, probation_end_date: f.probation_end_date || probEnd }))
+    }
+    // Auto-fill compensation
+    setLoadingComp(true)
+    Promise.all([
+      supabase.from('employee_compensation').select('amount').eq('profile_id', form.profile_id)
+        .order('effective_from', { ascending: false }).limit(2),
+      supabase.from('freelancer_rate_cards').select('amount,rate_type').eq('profile_id', form.profile_id)
+        .order('effective_from', { ascending: false }).limit(1),
+    ]).then(([comp, rate]) => {
+      const latest = comp.data?.[0]?.amount
+      const prev   = comp.data?.[1]?.amount
+      const rc     = rate.data?.[0]
+      setForm(f => ({
+        ...f,
+        monthly_ctc: f.monthly_ctc || (latest ? String(latest) : ''),
+        old_ctc:     f.old_ctc     || (prev   ? String(prev)   : latest ? String(latest) : ''),
+        new_ctc:     f.new_ctc     || (latest ? String(latest) : ''),
+        rate:        f.rate        || (rc?.amount ? String(rc.amount) : ''),
+        rate_type:   rc?.rate_type || f.rate_type,
+      }))
+      setLoadingComp(false)
+    })
+    // Try to fetch duties from JD template
+    if (['appointment_letter','internship_appointment'].includes(form.document_type)) {
+      supabase.from('scout_candidates').select('role_id').eq('id', form.profile_id).maybeSingle()
+        .then(async ({ data: cand }) => {
+          if (!cand?.role_id) return
+          const { data: role } = await supabase.from('scout_roles').select('jd_template_id').eq('id', cand.role_id).single()
+          if (!role?.jd_template_id) return
+          const { data: jd } = await supabase.from('scout_jd_templates').select('content').eq('id', role.jd_template_id).single()
+          if (!jd?.content) return
+          // Extract duties section
+          const content = jd.content as string
+          const match = content.match(/WHAT YOU'LL BE DOING[^\n]*\n([\s\S]*?)(?:\n[A-Z][A-Z\s]{3,}|\n$|$)/)
+          if (match) {
+            const extracted = match[1].trim()
+            setDuties(extracted)
+            setForm(f => ({ ...f, duties: f.duties || extracted }))
+          }
+        })
+    }
+  }, [form.profile_id])
 
   async function generate() {
     if (!form.profile_id) { showToast('Select an employee.', 'fail'); return }
     setGenerating(true)
-    const emp = employees.find(e => e.id === form.profile_id)
-    const ep = emp?.employee_profiles as EmployeeProfile | null
-    // Check employee_profiles first, then onboarding record
+    // Get drive folder
     const { data: epFolder } = await supabase.from('employee_profiles').select('drive_folder_url').eq('id', form.profile_id).maybeSingle()
-    const { data: obFolder } = !epFolder?.drive_folder_url ? await supabase.from('scout_onboarding').select('drive_folder_url').eq('employee_id', form.profile_id).maybeSingle() : { data: null }
+    const { data: obFolder } = !epFolder?.drive_folder_url
+      ? await supabase.from('scout_onboarding').select('drive_folder_url').eq('employee_id', form.profile_id).maybeSingle()
+      : { data: null }
     const driveFolderUrl = epFolder?.drive_folder_url || obFolder?.drive_folder_url || null
     const driveFolderIdMatch = driveFolderUrl ? driveFolderUrl.match(/folders\/([a-zA-Z0-9_-]+)/) : null
     const driveFolderId = driveFolderIdMatch ? driveFolderIdMatch[1] : null
@@ -992,41 +1085,134 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: { employees
     const res = await fetch('/api/generate-pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        document_type: form.document_type,
-        profile_id: form.profile_id,
-        employee_name: emp?.full_name || '',
-        role_title: ep?.designation || ep?.role || '',
-        department: ep?.department ? (DEPT_DISPLAY[ep.department] || ep.department) : '',
-        joining_date: ep?.joining_date || '',
-        signatory: form.signatory,
-        effective_date: form.effective_date,
-        notes: form.notes,
-        label: form.label,
-        drive_folder_id: driveFolderId,
+      body: JSON.stringify({ ...form, duties: form.duties || duties, drive_folder_id: driveFolderId,
+        probation_ctc:  form.probation_ctc  ? parseFloat(form.probation_ctc)  : null,
+        confirmed_ctc:  form.confirmed_ctc  ? parseFloat(form.confirmed_ctc)  : null,
+        monthly_ctc:    form.monthly_ctc    ? parseFloat(form.monthly_ctc)    : null,
+        old_ctc:        form.old_ctc        ? parseFloat(form.old_ctc)        : null,
+        new_ctc:        form.new_ctc        ? parseFloat(form.new_ctc)        : null,
+        stipend:        form.stipend        ? parseFloat(form.stipend)        : null,
+        rate:           form.rate           ? parseFloat(form.rate)           : null,
       })
     })
     const data = await res.json()
     setGenerating(false)
-    if (!data.html) { showToast('Generation failed.', 'fail'); return }
-    // Trigger HTML download -- user opens in browser and prints to PDF
+    if (!data.html) { showToast(data.error || 'Generation failed.', 'fail'); return }
     const a = document.createElement('a')
     a.href = data.html
     a.download = data.filename || 'document.html'
     a.click()
-    if (data.driveLink) {
-      showToast('Generated, saved to Drive and downloaded.')
-    } else {
-      showToast('Generated and downloaded. Open in browser, print to PDF.')
-    }
+    showToast(data.driveLink ? 'Generated, saved to Drive and downloaded.' : 'Downloaded. Open in browser and print to PDF.')
     onDone()
   }
 
+  const f = (key: keyof typeof form, label: string, type = 'text', placeholder = '') => (
+    <div className="field">
+      <label>{label}</label>
+      <input className="inp" type={type} value={(form as any)[key] || ''}
+        onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))} placeholder={placeholder} />
+    </div>
+  )
+  const fMoney = (key: keyof typeof form, label: string, placeholder = 'e.g. 25000') =>
+    f(key, label + (loadingComp ? ' (loading...)' : ''), 'number', placeholder)
+
+  // Dynamic extra fields based on document type
+  const extraFields = () => {
+    if (dt === 'offer_letter') return (
+      <>
+        <div className="field-row">
+          {fMoney('probation_ctc', 'Probation CTC (in-hand / month)')}
+          {fMoney('confirmed_ctc', 'Confirmed CTC (in-hand / month)')}
+        </div>
+        <div className="field-row">
+          {f('probation_months', 'Probation months', 'number', '3')}
+          {f('reports_to_name', 'Reporting to', 'text', 'Auto-filled')}
+        </div>
+      </>
+    )
+    if (dt === 'internship_offer') return (
+      <>
+        {fMoney('stipend', 'Monthly Stipend')}
+        <div className="field-row">
+          {f('internship_months', 'Duration (months)', 'number', '3')}
+          {f('internship_end_date', 'End Date (or leave blank)', 'date')}
+        </div>
+        {f('reports_to_name', 'Reporting to', 'text', 'Auto-filled')}
+      </>
+    )
+    if (dt === 'appointment_letter') return (
+      <>
+        {fMoney('monthly_ctc', 'Monthly CTC (gross)')}
+        {fMoney('confirmed_ctc', 'Post-confirmation CTC (if different)')}
+        <div className="field-row">
+          {f('probation_end_date', 'Probation End Date', 'date')}
+          {f('reports_to_name', 'Reporting to', 'text', 'Auto-filled')}
+        </div>
+        <div className="field">
+          <label>Duties {duties ? '(auto-filled from JD)' : '(one per line)'}</label>
+          <textarea className="inp" rows={4} value={form.duties || duties}
+            onChange={e => setForm(p => ({ ...p, duties: e.target.value }))}
+            placeholder="- Create visual assets for campaigns&#10;- Collaborate with strategists..." />
+        </div>
+      </>
+    )
+    if (dt === 'internship_appointment') return (
+      <>
+        {fMoney('stipend', 'Monthly Stipend')}
+        <div className="field-row">
+          {f('internship_end_date', 'Internship End Date', 'date')}
+          {f('reports_to_name', 'Reporting to', 'text', 'Auto-filled')}
+        </div>
+        <div className="field">
+          <label>Duties {duties ? '(auto-filled from JD)' : '(one per line)'}</label>
+          <textarea className="inp" rows={4} value={form.duties || duties}
+            onChange={e => setForm(p => ({ ...p, duties: e.target.value }))}
+            placeholder="- Create visual assets for campaigns..." />
+        </div>
+      </>
+    )
+    if (dt === 'freelance_agreement') return (
+      <>
+        <div className="field-row">
+          {fMoney('rate', 'Rate (INR)')}
+          <div className="field"><label>Rate Type</label>
+            <select className="inp" value={form.rate_type} onChange={e => setForm(f => ({ ...f, rate_type: e.target.value }))}>
+              <option value="monthly_retainer">Monthly Retainer</option>
+              <option value="daily">Daily Rate</option>
+              <option value="project">Project Rate</option>
+            </select>
+          </div>
+        </div>
+      </>
+    )
+    if (dt === 'appraisal' || dt === 'salary_revision') return (
+      <div className="field-row">
+        {fMoney('old_ctc', 'Previous CTC (/ month)')}
+        {fMoney('new_ctc', 'Revised CTC (/ month)')}
+      </div>
+    )
+    if (dt === 'experience_letter') return (
+      f('last_working_date', 'Last Working Date (leave blank if still employed)', 'date')
+    )
+    if (dt === 'internship_completion') return (
+      f('internship_end_date', 'Internship End Date', 'date')
+    )
+    return null
+  }
+
+  // Show gender for docs that use pronouns
+  const needsGender = ['experience_letter','internship_completion','relieving_letter'].includes(dt)
+  // Show signatory for docs that use single sig (not offer/internship offer/appointment which always use both)
+  const showSignatory = !['offer_letter','internship_offer','appointment_letter','internship_appointment'].includes(dt)
+
   return (
     <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 480 }}>
+      <div className="modal" style={{ maxWidth: 560 }}>
         <div className="modal-header">
-          <div><div className="modal-title">Generate Document</div></div>
+          <div>
+            <div className="modal-title">Generate Document</div>
+            <div className="modal-sub">Opens in browser -- print to PDF</div>
+          </div>
           <button className="close-btn" onClick={onClose}>&times;</button>
         </div>
         <div className="modal-body">
@@ -1037,32 +1223,62 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: { employees
             </select>
           </div>
           <div className="field"><label>Document Type *</label>
-            <select className="inp" value={form.document_type} onChange={e => setForm(f => ({ ...f, document_type: e.target.value as DocumentType }))}>
-              <option value="appointment_letter">Appointment Letter</option>
-              <option value="freelance_agreement">Freelance Agreement</option>
-              <option value="appraisal">Appraisal Letter</option>
-              <option value="probation_confirmation">Probation Confirmation</option>
-              <option value="salary_revision">Salary Revision Letter</option>
-              <option value="experience_letter">Experience Letter</option>
-              <option value="internship_completion">Internship Completion Certificate</option>
-              <option value="relieving_letter">Relieving Letter</option>
-              <option value="warning_letter">Warning Letter</option>
+            <select className="inp" value={form.document_type} onChange={e => setForm(f => ({ ...f, document_type: e.target.value }))}>
+              <optgroup label="Offer">
+                <option value="offer_letter">Offer Letter</option>
+                <option value="internship_offer">Internship Offer Letter</option>
+              </optgroup>
+              <optgroup label="Appointment">
+                <option value="appointment_letter">Appointment Letter</option>
+                <option value="internship_appointment">Internship Appointment Letter</option>
+                <option value="freelance_agreement">Freelance Agreement</option>
+              </optgroup>
+              <optgroup label="During Employment">
+                <option value="appraisal">Appraisal Letter</option>
+                <option value="salary_revision">Salary Revision Letter</option>
+                <option value="probation_confirmation">Probation Confirmation</option>
+                <option value="warning_letter">Warning Letter</option>
+              </optgroup>
+              <optgroup label="Exit">
+                <option value="experience_letter">Experience Letter</option>
+                <option value="internship_completion">Internship Completion Certificate</option>
+                <option value="relieving_letter">Relieving Letter</option>
+              </optgroup>
             </select>
           </div>
-          <div className="field-row">
-            <div className="field"><label>Effective Date</label><input className="inp" type="date" value={form.effective_date} onChange={e => setForm(f => ({ ...f, effective_date: e.target.value }))} /></div>
+          {extraFields()}
+          <div className="field"><label>Effective / Issue Date</label>
+            <input className="inp" type="date" value={form.effective_date}
+              onChange={e => setForm(f => ({ ...f, effective_date: e.target.value }))} />
+          </div>
+          {showSignatory && (
             <div className="field"><label>Signatory</label>
               <select className="inp" value={form.signatory} onChange={e => setForm(f => ({ ...f, signatory: e.target.value }))}>
                 <option value="aakash">Aakash Rathi, Founder</option>
-                <option value="niki">Niki A. Rathi, Director</option>
+                <option value="niki">Niki A. Rathi, Proprietor</option>
               </select>
             </div>
+          )}
+          {needsGender && (
+            <div className="field"><label>Gender</label>
+              <select className="inp" value={form.gender} onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}>
+                <option value="neutral">Prefer not to say / Neutral (they/them)</option>
+                <option value="female">Female (she/her)</option>
+                <option value="male">Male (he/him)</option>
+              </select>
+            </div>
+          )}
+          <div className="field"><label>Additional Notes (optional)</label>
+            <textarea className="inp" value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              placeholder="Any specific details, achievements, or clauses to include..." rows={2} />
           </div>
-          <div className="field"><label>Notes (optional)</label><textarea className="inp" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Any specific details to include..." rows={2} /></div>
         </div>
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={generating} onClick={generate}>{generating ? <><div className="spinner" /><span>Generating...</span></> : 'Generate & Download'}</button>
+          <button className="btn btn-primary" disabled={generating} onClick={generate}>
+            {generating ? <><div className="spinner" /><span>Generating...</span></> : 'Generate & Download'}
+          </button>
         </div>
       </div>
     </div>
