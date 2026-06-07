@@ -36,10 +36,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; f
 .nav-section { font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 0.6px; padding: 16px 16px 6px; }
 .nav-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 16px; background: none; border: none; cursor: pointer; font-size: 13px; color: var(--text2); text-align: left; border-radius: 0; transition: all 0.12s; text-decoration: none; }
 .nav-btn:hover { background: var(--bg3); color: var(--text); }
-.nav-btn.active { background: var(--bg3); color: var(--amber); }
+.nav-btn.active { background: var(--bg3); color: var(--red); }
 .nav-btn svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.7; }
 .nav-btn.active svg { opacity: 1; }
-.nav-badge { margin-left: auto; background: var(--amber); color: #000; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
+.nav-badge { margin-left: auto; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; min-width: 18px; text-align: center; }
 .sidebar-foot { padding: 16px; border-top: 1px solid var(--border); }
 .sidebar-user { margin-bottom: 10px; }
 .sidebar-user-name { font-size: 13px; font-weight: 600; color: var(--text); }
@@ -53,8 +53,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; f
 
 /* Buttons */
 .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: var(--rs); border: none; cursor: pointer; font-size: 13px; font-weight: 600; transition: all 0.12s; text-decoration: none; }
-.btn-primary { background: var(--amber); color: #1a1a1a; }
-.btn-primary:hover { background: #d4952e; }
+.btn-primary { background: var(--red); color: #fff; }
+.btn-primary:hover { background: #c73525; }
 .btn-ghost { background: var(--bg3); color: var(--text2); border: 1px solid var(--border2); }
 .btn-ghost:hover { background: var(--bg4); color: var(--text); }
 .btn-danger { background: rgba(224,63,42,0.15); color: var(--red); border: 1px solid rgba(224,63,42,0.2); }
@@ -71,7 +71,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; f
 .field { display: flex; flex-direction: column; gap: 5px; }
 .field label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.4px; }
 .inp { background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--rs); padding: 9px 12px; font-size: 13px; color: var(--text); outline: none; width: 100%; transition: border-color 0.12s; font-family: inherit; }
-.inp:focus { border-color: var(--amber); }
+.inp:focus { border-color: var(--red); }
 .inp::placeholder { color: var(--text3); }
 select.inp { cursor: pointer; }
 textarea.inp { resize: vertical; min-height: 80px; line-height: 1.5; }
@@ -93,7 +93,7 @@ textarea.inp { resize: vertical; min-height: 80px; line-height: 1.5; }
 .tabs { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
 .tab-btn { background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 16px; font-size: 13px; font-weight: 600; color: var(--text3); cursor: pointer; transition: all 0.12s; margin-bottom: -1px; }
 .tab-btn:hover { color: var(--text2); }
-.tab-btn.active { color: var(--amber); border-bottom-color: var(--amber); }
+.tab-btn.active { color: var(--red); border-bottom-color: var(--red); }
 
 /* Badges */
 .badge { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
