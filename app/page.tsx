@@ -73,14 +73,12 @@ export default function StockApp() {
     <div className="app-shell">
       {/* Sidebar */}
       <aside className="sidebar">
-        <div className="sidebar-logo">
-          <div style={{background:'#E03F2A',borderRadius:6,padding:'4px 7px',display:'flex',alignItems:'center',justifyContent:'center'}}>
-            <img src="https://ferlauhakdbfpwfapxxw.supabase.co/storage/v1/object/public/assets/branding/logo.png" alt="" style={{height:16,filter:'brightness(0) invert(1)'}} />
+        <div className="sidebar-top">
+          <div className="sidebar-logo">
+            <img src="https://ferlauhakdbfpwfapxxw.supabase.co/storage/v1/object/public/assets/branding/logo.png" alt="BT" />
           </div>
-          <div>
-            <div className="sidebar-app-name">Stock</div>
-            <div className="sidebar-app-sub">HR System</div>
-          </div>
+          <div className="sidebar-app-name">Stock</div>
+          <div className="sidebar-app-sub">HR System</div>
         </div>
         <nav className="sidenav">
           <div className="nav-section">HR</div>
@@ -145,12 +143,12 @@ function AuthScreen({ onSignIn }: { onSignIn: (e: string, p: string) => void }) 
   return (
     <div className="auth-screen">
       <div className="auth-card">
-        <div className="auth-logo">
-          <img src="https://ferlauhakdbfpwfapxxw.supabase.co/storage/v1/object/public/assets/branding/logo.png" alt="" style={{ height: 28 }} />
-          <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Stock</div>
-            <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>HR System</div>
+        <div style={{marginBottom:24}}>
+          <div style={{background:'var(--red)',borderRadius:8,padding:'6px 10px',display:'inline-block',lineHeight:0,marginBottom:10}}>
+            <img src="https://ferlauhakdbfpwfapxxw.supabase.co/storage/v1/object/public/assets/branding/logo.png" alt="BT" style={{height:18,filter:'brightness(0) invert(1)',display:'block'}} />
           </div>
+          <div style={{fontSize:18,fontWeight:700,color:'var(--text)',letterSpacing:'-0.3px'}}>Stock</div>
+          <div style={{fontSize:12,color:'var(--text3)',marginTop:2}}>HR System of Record</div>
         </div>
         <div className="auth-title">Sign in</div>
         <div className="auth-sub">Admin and HR access only.</div>
