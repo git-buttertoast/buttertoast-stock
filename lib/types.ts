@@ -22,6 +22,7 @@ export interface EmployeeProfile {
   reports_to: string | null
   last_day: string | null
   status: EmployeeStatus
+  drive_folder_url: string | null
 }
 
 export interface Employee extends Profile {
