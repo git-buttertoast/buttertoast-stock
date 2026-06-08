@@ -577,6 +577,14 @@ export async function POST(req: NextRequest) {
       generated_at: new Date().toISOString(),
     })
 
+    // If generating an experience letter, mark any pending requests as fulfilled
+    if (document_type === 'experience_letter' && profile_id) {
+      await supabase.from('experience_letter_requests')
+        .update({ status: 'fulfilled' })
+        .eq('profile_id', profile_id)
+        .eq('status', 'pending')
+    }
+
     return NextResponse.json({ html: `data:text/html;base64,${b64}`, filename, driveLink })
   } catch (err: any) {
     console.error('Generate error:', err)
