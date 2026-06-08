@@ -321,6 +321,7 @@ function PersonDrawer({ employee, tab, onTabChange, onClose, onRefresh, showToas
 function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee; onRefresh: () => void; showToast: (m: string, t?: 'ok' | 'fail') => void }) {
   const ep = employee.employee_profiles as EmployeeProfile | null
   const [editing, setEditing] = useState(false)
+  const [allEmployees, setAllEmployees] = useState<{id: string; full_name: string}[]>([])
   const [form, setForm] = useState({
     employee_id: ep?.employee_id || '',
     employee_type: ep?.employee_type || 'permanent',
@@ -328,13 +329,18 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
     role: ep?.role || '',
     seniority: ep?.seniority || '',
     joining_date: ep?.joining_date || '',
-    reports_to_name: '',
+    reports_to: ep?.reports_to || '',
     status: ep?.status || 'active',
     phone: employee.phone || '',
   })
   const [saving, setSaving] = useState(false)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [driveFolderUrl, setDriveFolderUrl] = useState(ep?.drive_folder_url || '')
+
+  useEffect(() => {
+    supabase.from('profiles').select('id,full_name').eq('is_active', true).order('full_name')
+      .then(({ data }) => setAllEmployees((data || []).filter(e => e.id !== employee.id)))
+  }, [employee.id])
 
   async function createDriveFolder() {
     setCreatingFolder(true)
@@ -368,6 +374,7 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
       role: form.role || null,
       joining_date: form.joining_date || null,
       status: form.status,
+      reports_to: form.reports_to || null,
     }).eq('id', ep?.id || '')
     if (form.phone !== employee.phone) {
       await supabase.from('profiles').update({ phone: form.phone || null }).eq('id', employee.id)
@@ -379,6 +386,9 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
     onRefresh()
   }
 
+  // Resolve reports_to name for display
+  const reportsToName = allEmployees.find(e => e.id === (ep?.reports_to || form.reports_to))?.full_name || '--'
+
   const rows: [string, string][] = [
     ['Employee ID', ep?.employee_id || '--'],
     ['Type', ep?.employee_type || '--'],
@@ -387,6 +397,7 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
     ['Seniority', ep?.seniority || '--'],
     ['Designation', ep?.designation || '--'],
     ['Joining Date', fmtDate(ep?.joining_date || null)],
+    ['Reports To', reportsToName],
     ['Status', ep?.status || '--'],
     ['Email', employee.email],
     ['Phone', employee.phone || '--'],
@@ -429,6 +440,9 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
             </button>
           )}
         </div>
+        {ep?.employee_type === 'intern' && (
+          <InternshipAmendments employee={employee} showToast={showToast} />
+        )}
         </>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -462,8 +476,100 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
             </div>
           </div>
           <div className="field"><label>Phone</label><input className="inp" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></div>
+          <div className="field"><label>Reports To</label>
+            <select className="inp" value={form.reports_to} onChange={e => setForm(f => ({ ...f, reports_to: e.target.value }))}>
+              <option value="">None</option>
+              {allEmployees.map(e => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+            </select>
+          </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Internship Amendments ─────────────────────────────────────────────────────
+function InternshipAmendments({ employee, showToast }: { employee: Employee; showToast: (m: string, t?: 'ok' | 'fail') => void }) {
+  const ep = employee.employee_profiles as EmployeeProfile | null
+  const [amendments, setAmendments] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [adding, setAdding] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ extended_to: '', reason: '' })
+
+  const load = async () => {
+    setLoading(true)
+    const { data } = await supabase.from('internship_amendments').select('*')
+      .eq('profile_id', employee.id).order('created_at', { ascending: false })
+    setAmendments(data || [])
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [employee.id])
+
+  async function save() {
+    if (!form.extended_to) { showToast('New end date required.', 'fail'); return }
+    setSaving(true)
+    // Get current end date -- last amendment extended_to or joining_date + internship months
+    const latestEnd = amendments[0]?.extended_to || ep?.joining_date || null
+    const { error } = await supabase.from('internship_amendments').insert({
+      profile_id: employee.id,
+      original_end: latestEnd,
+      extended_to: form.extended_to,
+      reason: form.reason || null,
+    })
+    setSaving(false)
+    if (error) { showToast('Failed to save.', 'fail'); return }
+    showToast('Internship extended.')
+    setAdding(false)
+    setForm({ extended_to: '', reason: '' })
+    load()
+  }
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>Internship Extensions</div>
+        <button className="btn btn-ghost btn-sm" onClick={() => setAdding(!adding)}>+ Extend</button>
+      </div>
+      {adding && (
+        <div className="card" style={{ padding: 14, marginBottom: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="field">
+              <label>New End Date *</label>
+              <input className="inp" type="date" value={form.extended_to} onChange={e => setForm(f => ({ ...f, extended_to: e.target.value }))} />
+            </div>
+            <div className="field">
+              <label>Reason</label>
+              <input className="inp" value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="e.g. Project extended, performance review pending" />
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" disabled={saving} onClick={save}>{saving ? 'Saving...' : 'Save'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {loading ? <div className="empty-state"><div className="spinner" /></div>
+        : amendments.length === 0 ? (
+          <div style={{ fontSize: 12, color: 'var(--text3)', padding: '8px 0' }}>No extensions recorded.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {amendments.map((a: any) => (
+              <div key={a.id} style={{ background: 'var(--bg3)', borderRadius: 8, padding: '10px 12px', fontSize: 12 }}>
+                <div style={{ fontWeight: 600, color: 'var(--text)' }}>
+                  Extended to {fmtDate(a.extended_to)}
+                </div>
+                <div style={{ color: 'var(--text3)', marginTop: 2 }}>
+                  From {fmtDate(a.original_end)}
+                  {a.reason && <> &bull; {a.reason}</>}
+                  &bull; {new Date(a.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      }
     </div>
   )
 }
