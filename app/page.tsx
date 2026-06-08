@@ -330,6 +330,7 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
     seniority: ep?.seniority || '',
     joining_date: ep?.joining_date || '',
     reports_to: ep?.reports_to || '',
+    last_day: ep?.last_day || '',
     status: ep?.status || 'active',
     phone: employee.phone || '',
   })
@@ -375,6 +376,7 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
       joining_date: form.joining_date || null,
       status: form.status,
       reports_to: form.reports_to || null,
+      last_day: (form as any).last_day || null,
     }).eq('id', ep?.id || '')
     if (form.phone !== employee.phone) {
       await supabase.from('profiles').update({ phone: form.phone || null }).eq('id', employee.id)
@@ -475,7 +477,10 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
               </select>
             </div>
           </div>
-          <div className="field"><label>Phone</label><input className="inp" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></div>
+          <div className="field-row">
+            <div className="field"><label>Phone</label><input className="inp" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></div>
+            <div className="field"><label>Last Working Day</label><input className="inp" type="date" value={(form as any).last_day || ''} onChange={e => setForm(f => ({ ...f, last_day: e.target.value } as any))} /></div>
+          </div>
           <div className="field"><label>Reports To</label>
             <select className="inp" value={form.reports_to} onChange={e => setForm(f => ({ ...f, reports_to: e.target.value }))}>
               <option value="">None</option>
@@ -609,6 +614,15 @@ function PersonCompensation({ employee, showToast }: { employee: Employee; showT
       frequency: form.frequency,
       effective_from: form.effective_from,
       notes: form.notes || null,
+    }
+    // Close off the previous record's effective_to before inserting new one
+    if (records.length > 0) {
+      const prev = records[0] as any
+      if (prev && !prev.effective_to) {
+        const dayBefore = new Date(form.effective_from)
+        dayBefore.setDate(dayBefore.getDate() - 1)
+        await supabase.from(table as any).update({ effective_to: dayBefore.toISOString().split('T')[0] }).eq('id', prev.id)
+      }
     }
     const { error } = await supabase.from(table as any).insert(payload as any)
     setSaving(false)
@@ -1178,6 +1192,9 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
 
   async function generate() {
     if (!form.profile_id) { showToast('Select an employee.', 'fail'); return }
+    if (dt === 'warning_letter' && !form.notes.trim()) {
+      showToast('Warning letter requires details in the Notes field.', 'fail'); return
+    }
     setGenerating(true)
     // Get drive folder
     const { data: epFolder } = await supabase.from('employee_profiles').select('drive_folder_url').eq('id', form.profile_id).maybeSingle()
