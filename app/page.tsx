@@ -1221,20 +1221,10 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     const data = await res.json()
     setGenerating(false)
     if (!data.html) { showToast(data.error || 'Generation failed.', 'fail'); return }
-    // Use hidden form POST -- bypasses popup blocker entirely
-    const form = document.createElement('form')
-    form.method = 'POST'
-    form.action = '/print'
-    form.target = '_blank'
-    const input = document.createElement('input')
-    input.type = 'hidden'
-    input.name = 'html'
-    input.value = data.html
-    form.appendChild(input)
-    document.body.appendChild(form)
-    form.submit()
-    document.body.removeChild(form)
-    showToast(data.driveLink ? 'Generated and saved to Drive. Print dialog will open.' : 'Document ready. Print dialog will open.')
+    // Store HTML in sessionStorage then navigate -- no popup blocker, no size limit
+    sessionStorage.setItem('bt_print_html', data.html)
+    window.location.href = '/print'
+    showToast(data.driveLink ? 'Generated and saved to Drive. Opening document...' : 'Document ready. Opening...')
     onDone()
   }
 
