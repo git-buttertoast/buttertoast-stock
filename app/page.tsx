@@ -1220,12 +1220,9 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     })
     const data = await res.json()
     setGenerating(false)
-    if (!data.html) { showToast(data.error || 'Generation failed.', 'fail'); return }
-    const a = document.createElement('a')
-    a.href = data.html
-    a.download = data.filename || 'document.html'
-    a.click()
-    showToast(data.driveLink ? 'Generated, saved to Drive and downloaded.' : 'Downloaded. Open in browser and print to PDF.')
+    if (!data.printUrl) { showToast(data.error || 'Generation failed.', 'fail'); return }
+    window.open(data.printUrl, '_blank')
+    showToast(data.driveLink ? 'Generated and saved to Drive. Print dialog will open.' : 'Document ready. Use print dialog to save as PDF.')
     onDone()
   }
 
