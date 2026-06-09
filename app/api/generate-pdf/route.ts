@@ -13,7 +13,7 @@ const SIGN_NIKI   = 'https://ferlauhakdbfpwfapxxw.supabase.co/storage/v1/object/
 
 const LH_DEFAULTS = {
   top: 38, bottom: 20, left: 20, right: 20,
-  lh_url: 'https://ferlauhakdbfpwfapxxw.supabase.co/storage/v1/object/public/assets/branding/letterhead.pdf',
+  lh_url: 'https://ferlauhakdbfpwfapxxw.supabase.co/storage/v1/object/public/assets/branding/letterhead.png',
   company: 'Butter Toast',
   company_full: 'HATCHX INDIA (Butter Toast)',
   company_address: 'Office No. 502, Fifth Floor, Trinity, Thaltej, Ahmedabad, Gujarat - 380059',
@@ -585,7 +585,15 @@ export async function POST(req: NextRequest) {
         .eq('status', 'pending')
     }
 
-    return NextResponse.json({ html: `data:text/html;base64,${b64}`, filename, driveLink })
+    // Store HTML in stock_print_jobs for print page
+    const { data: jobData, error: jobError } = await supabase
+      .from('stock_print_jobs')
+      .insert({ html })
+      .select('id')
+      .single()
+    if (jobError) throw new Error('Failed to create print job: ' + jobError.message)
+    const printUrl = '/print?job=' + jobData.id
+    return NextResponse.json({ printUrl, filename, driveLink })
   } catch (err: any) {
     console.error('Generate error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
