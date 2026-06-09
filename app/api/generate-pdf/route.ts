@@ -629,15 +629,7 @@ export async function POST(req: NextRequest) {
         .eq('status', 'pending')
     }
 
-    // Store HTML in stock_print_jobs for print page
-    const { data: jobData, error: jobError } = await supabase
-      .from('stock_print_jobs')
-      .insert({ html })
-      .select('id')
-      .single()
-    if (jobError) throw new Error('Failed to create print job: ' + jobError.message)
-    const printUrl = '/print?job=' + jobData.id
-    return NextResponse.json({ printUrl, filename, driveLink })
+    return NextResponse.json({ html, filename, driveLink })
   } catch (err: any) {
     console.error('Generate error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
