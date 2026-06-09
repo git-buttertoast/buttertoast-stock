@@ -1220,16 +1220,20 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     })
     const data = await res.json()
     setGenerating(false)
-    if (!data.printUrl) { showToast(data.error || 'Generation failed.', 'fail'); return }
-    // Must open window synchronously (before any await) to avoid popup blocker
-    // Instead, redirect current tab or use a form POST trick -- simplest: just navigate
-    const printWin = window.open('', '_blank')
-    if (printWin) {
-      printWin.location.href = data.printUrl
-    } else {
-      // Fallback: navigate in same tab
-      window.location.href = data.printUrl
-    }
+    if (!data.html) { showToast(data.error || 'Generation failed.', 'fail'); return }
+    // Use hidden form POST -- bypasses popup blocker entirely
+    const form = document.createElement('form')
+    form.method = 'POST'
+    form.action = '/print'
+    form.target = '_blank'
+    const input = document.createElement('input')
+    input.type = 'hidden'
+    input.name = 'html'
+    input.value = data.html
+    form.appendChild(input)
+    document.body.appendChild(form)
+    form.submit()
+    document.body.removeChild(form)
     showToast(data.driveLink ? 'Generated and saved to Drive. Print dialog will open.' : 'Document ready. Print dialog will open.')
     onDone()
   }
