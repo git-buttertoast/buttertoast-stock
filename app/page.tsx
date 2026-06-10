@@ -9,6 +9,17 @@ import type {
   EmployeeType, DocumentType
 } from '@/lib/types'
 
+// ── iOS-safe date input (overlay pattern) ──
+function DateInput({ value, onChange, className = 'inp' }: { value: string, onChange: (e: any) => void, className?: string }) {
+  const disp = value ? new Date(value + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+  return (
+    <div style={{ position: 'relative', width: '100%' }}>
+      <input type="text" className={className} readOnly value={disp} placeholder="Select date" style={{ cursor: 'pointer' }} />
+      <input type="date" value={value} onChange={onChange} style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
+    </div>
+  )
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 function ini(name: string) {
   return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
@@ -145,7 +156,7 @@ function AuthScreen({ onSignIn }: { onSignIn: (e: string, p: string) => void }) 
       <div className="auth-card">
         <div style={{marginBottom:24}}>
           <div style={{background:'var(--red)',borderRadius:8,padding:'6px 10px',display:'inline-block',lineHeight:0,marginBottom:10}}>
-            <img src="https://ferlauhakdbfpwfapxxw.supabase.co/storage/v1/object/public/assets/branding/logo.png" alt="BT" style={{height:18,filter:'brightness(0) invert(1)',display:'block'}} />
+            <img src="https://ferlauhakdbfpwfapxxw.supabase.co/storage/v1/object/public/assets/branding/logo.png" alt="BT" style={{height:18,display:'block'}} />
           </div>
           <div style={{fontSize:18,fontWeight:700,color:'var(--text)',letterSpacing:'-0.3px'}}>Stock</div>
           <div style={{fontSize:12,color:'var(--text3)',marginTop:2}}>HR System of Record</div>
@@ -468,7 +479,7 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
             <div className="field"><label>Role</label><input className="inp" value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} /></div>
           </div>
           <div className="field-row">
-            <div className="field"><label>Joining Date</label><input className="inp" type="date" value={form.joining_date} onChange={e => setForm(f => ({ ...f, joining_date: e.target.value }))} /></div>
+            <div className="field"><label>Joining Date</label><DateInput value={form.joining_date} onChange={e => setForm(f => ({ ...f, joining_date: e.target.value }))} /></div>
             <div className="field"><label>Status</label>
               <select className="inp" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value as any }))}>
                 <option value="onboarding">Onboarding</option>
@@ -479,7 +490,7 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
           </div>
           <div className="field-row">
             <div className="field"><label>Phone</label><input className="inp" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} /></div>
-            <div className="field"><label>Last Working Day</label><input className="inp" type="date" value={(form as any).last_day || ''} onChange={e => setForm(f => ({ ...f, last_day: e.target.value } as any))} /></div>
+            <div className="field"><label>Last Working Day</label><DateInput value={(form as any).last_day || ''} onChange={e => setForm(f => ({ ...f, last_day: e.target.value } as any))} /></div>
           </div>
           <div className="field"><label>Reports To</label>
             <select className="inp" value={form.reports_to} onChange={e => setForm(f => ({ ...f, reports_to: e.target.value }))}>
@@ -542,7 +553,7 @@ function InternshipAmendments({ employee, showToast }: { employee: Employee; sho
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div className="field">
               <label>New End Date *</label>
-              <input className="inp" type="date" value={form.extended_to} onChange={e => setForm(f => ({ ...f, extended_to: e.target.value }))} />
+              <DateInput value={form.extended_to} onChange={e => setForm(f => ({ ...f, extended_to: e.target.value }))} />
             </div>
             <div className="field">
               <label>Reason</label>
@@ -670,7 +681,7 @@ function PersonCompensation({ employee, showToast }: { employee: Employee; showT
                 <div className="field"><label>Notes</label><input className="inp" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="e.g. Post-appraisal revision" /></div>
               </>
             )}
-            <div className="field"><label>Effective From</label><input className="inp" type="date" value={form.effective_from} onChange={e => setForm(f => ({ ...f, effective_from: e.target.value }))} /></div>
+            <div className="field"><label>Effective From</label><DateInput value={form.effective_from} onChange={e => setForm(f => ({ ...f, effective_from: e.target.value }))} /></div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
               <button className="btn btn-primary btn-sm" disabled={saving} onClick={save}>{saving ? 'Saving...' : 'Save'}</button>
@@ -1370,7 +1381,7 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
           </div>
           {extraFields()}
           <div className="field"><label>Effective / Issue Date</label>
-            <input className="inp" type="date" value={form.effective_date}
+            <DateInput value={form.effective_date}
               onChange={e => setForm(f => ({ ...f, effective_date: e.target.value }))} />
           </div>
           {showSignatory && (
