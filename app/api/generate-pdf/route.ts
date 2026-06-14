@@ -41,6 +41,19 @@ function fmtMoney(n: number | null | undefined) {
   return new Intl.NumberFormat('en-IN').format(n)
 }
 
+// Parse a possibly-string/number/null amount into a number or null (never NaN).
+function num(v: any): number | null {
+  if (v === null || v === undefined || v === '') return null
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.]/g, ''))
+  return isNaN(n) ? null : n
+}
+
+// Derive a monthly figure from an annual CTC (rounded to the nearest rupee).
+function toMonthly(annual: number | null): number | null {
+  if (annual === null) return null
+  return Math.round(annual / 12)
+}
+
 function pronoun(gender: string, type: 'sub'|'obj'|'pos') {
   if (gender === 'male')   return { sub: 'he',   obj: 'him',  pos: 'his'   }[type]
   if (gender === 'female') return { sub: 'she',  obj: 'her',  pos: 'her'   }[type]
@@ -150,7 +163,7 @@ ${dutiesList ? `<p>Your duties and responsibilities will include, but are not li
 <hr class="divider"/>
 <h3>2. Compensation and Benefits</h3>
 <p><strong>Base Compensation</strong></p>
-<p>You will receive a gross monthly remuneration of <strong>INR ${fmtMoney(p.probation_ctc)}</strong>, payable on or before the 5th of each month, subject to applicable taxes and statutory deductions.${p.confirmed_ctc ? ` To be revised post confirmation to INR ${fmtMoney(p.confirmed_ctc)} per month.` : ''}</p>
+<p>You will receive a gross annual CTC of <strong>INR ${fmtMoney(p.annual_probation_ctc)}</strong> (approximately <strong>INR ${fmtMoney(p.probation_ctc)}</strong> per month), payable on or before the 5th of each month, subject to applicable taxes and statutory deductions.${p.annual_confirmed_ctc ? ` To be revised post confirmation to an annual CTC of INR ${fmtMoney(p.annual_confirmed_ctc)} (approximately INR ${fmtMoney(p.confirmed_ctc)} per month).` : ''}</p>
 <p><strong>Allowances &amp; Benefits</strong></p>
 <p>Depending on your role and tenure, you may be entitled to the following:</p>
 <ul>
@@ -257,7 +270,7 @@ function appointmentLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
 <hr class="divider"/>
 <h3>2. Compensation and Benefits</h3>
 <p><strong>Base Compensation</strong></p>
-<p>You will receive a gross monthly remuneration of <strong>INR ${fmtMoney(p.monthly_ctc)}</strong>, payable on or before the 5th of each month, subject to applicable taxes and statutory deductions.${p.confirmed_ctc ? ` To be revised post confirmation to INR ${fmtMoney(p.confirmed_ctc)} per month.` : ''}</p>
+<p>You will receive a gross annual CTC of <strong>INR ${fmtMoney(p.annual_ctc)}</strong> (approximately <strong>INR ${fmtMoney(p.monthly_ctc)}</strong> per month), payable on or before the 5th of each month, subject to applicable taxes and statutory deductions.${p.annual_confirmed_ctc ? ` To be revised post confirmation to an annual CTC of INR ${fmtMoney(p.annual_confirmed_ctc)} (approximately INR ${fmtMoney(p.confirmed_ctc)} per month).` : ''}</p>
 <p><strong>Allowances &amp; Benefits</strong></p>
 <p>Depending on your role and tenure, you may be entitled to the following:</p>
 <ul>
@@ -412,8 +425,8 @@ function appraisalLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
 <p class="fun">The kitchen has noticed. Here's what that looks like.</p>
 <p>Following your performance appraisal, we are pleased to revise your compensation effective <strong>${dateStr}</strong>.</p>
 <table class="terms" style="margin:16px 0;">
-  <tr><td>Previous Compensation</td><td>INR ${fmtMoney(p.old_ctc)} per month</td></tr>
-  <tr><td>Revised Compensation</td><td>INR ${fmtMoney(p.new_ctc)} per month</td></tr>
+  <tr><td>Previous Compensation</td><td>INR ${fmtMoney(p.annual_old_ctc)} per annum (INR ${fmtMoney(p.old_ctc)} / month)</td></tr>
+  <tr><td>Revised Compensation</td><td>INR ${fmtMoney(p.annual_new_ctc)} per annum (INR ${fmtMoney(p.new_ctc)} / month)</td></tr>
   <tr><td>Effective Date</td><td>${dateStr}</td></tr>
 </table>
 <p>This revision is in recognition of your contributions, dedication, and performance at Butter Toast.${p.notes ? ` ${p.notes}` : ''}</p>
@@ -430,8 +443,8 @@ function salaryRevision(p: Record<string,any>, s: typeof LH_DEFAULTS) {
 <p>Dear <strong>${p.employee_name}</strong>,</p>
 <p>This is to inform you that your compensation has been revised as follows, effective <strong>${dateStr}</strong>:</p>
 <table class="terms" style="margin:16px 0;">
-  <tr><td>Previous Compensation</td><td>INR ${fmtMoney(p.old_ctc)} per month</td></tr>
-  <tr><td>Revised Compensation</td><td>INR ${fmtMoney(p.new_ctc)} per month</td></tr>
+  <tr><td>Previous Compensation</td><td>INR ${fmtMoney(p.annual_old_ctc)} per annum (INR ${fmtMoney(p.old_ctc)} / month)</td></tr>
+  <tr><td>Revised Compensation</td><td>INR ${fmtMoney(p.annual_new_ctc)} per annum (INR ${fmtMoney(p.new_ctc)} / month)</td></tr>
   <tr><td>Effective Date</td><td>${dateStr}</td></tr>
 </table>
 ${p.notes ? `<p>${p.notes}</p>` : ''}
@@ -578,9 +591,17 @@ export async function POST(req: NextRequest) {
       reports_to_name = mgr?.full_name || ''
     }
 
-    // Resolve compensation history
+    // Resolve compensation history. Stored amounts are ANNUAL CTC (source of truth).
+    // Monthly is always derived as annual / 12 at print time.
     const latestComp  = compData?.[0]?.amount || null
     const previousComp = compData?.[1]?.amount || null
+
+    // Annual figures: prefer explicit body values (sent by Scout as annual), else stored annual comp.
+    const annualBase      = num(body.monthly_ctc)   ?? num(body.annual_ctc)    ?? latestComp
+    const annualProbation = num(body.probation_ctc) ?? annualBase
+    const annualConfirmed = num(body.confirmed_ctc) ?? null
+    const annualOld       = num(body.old_ctc)       ?? previousComp
+    const annualNew       = num(body.new_ctc)       ?? latestComp
 
     const p: Record<string,any> = {
       ...body,
@@ -588,9 +609,18 @@ export async function POST(req: NextRequest) {
       role_title:      epData?.designation || epData?.role || body.role_title || '',
       department:      epData?.department ? (epData.department.replace(/_/g, ' ')) : body.department || '',
       joining_date:    epData?.joining_date || body.joining_date || '',
-      monthly_ctc:     body.monthly_ctc || latestComp,
-      old_ctc:         body.old_ctc || previousComp,
-      new_ctc:         body.new_ctc || latestComp,
+      // Annual CTC (source of truth)
+      annual_ctc:           annualBase,
+      annual_probation_ctc: annualProbation,
+      annual_confirmed_ctc: annualConfirmed,
+      annual_old_ctc:       annualOld,
+      annual_new_ctc:       annualNew,
+      // Monthly = annual / 12 (derived)
+      monthly_ctc:          toMonthly(annualBase),
+      probation_ctc:        toMonthly(annualProbation),
+      confirmed_ctc:        toMonthly(annualConfirmed),
+      old_ctc:              toMonthly(annualOld),
+      new_ctc:              toMonthly(annualNew),
       reports_to_name,
     }
 
