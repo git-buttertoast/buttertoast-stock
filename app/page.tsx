@@ -597,7 +597,7 @@ function PersonCompensation({ employee, showToast }: { employee: Employee; showT
   const [records, setRecords] = useState<(EmployeeCompensation | FreelancerRateCard)[]>([])
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
-  const [form, setForm] = useState({ amount: '', frequency: 'monthly', effective_from: new Date().toISOString().split('T')[0], notes: '', rate_type: 'monthly_retainer', scope_notes: '' })
+  const [form, setForm] = useState({ amount: '', frequency: 'annual', effective_from: new Date().toISOString().split('T')[0], notes: '', rate_type: 'monthly_retainer', scope_notes: '' })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -610,6 +610,7 @@ function PersonCompensation({ employee, showToast }: { employee: Employee; showT
 
   async function save() {
     if (!form.amount) { showToast('Amount required.', 'fail'); return }
+    if (!form.effective_from) { showToast('Effective-from date required.', 'fail'); return }
     setSaving(true)
     const table = isFreelancer ? 'freelancer_rate_cards' : 'employee_compensation'
     const payload = isFreelancer ? {
@@ -622,7 +623,7 @@ function PersonCompensation({ employee, showToast }: { employee: Employee; showT
       profile_id: employee.id,
       compensation_type: ep?.employee_type === 'intern' ? 'stipend' : 'ctc',
       amount: parseFloat(form.amount),
-      frequency: form.frequency,
+      frequency: 'annual',
       effective_from: form.effective_from,
       notes: form.notes || null,
     }
@@ -637,7 +638,7 @@ function PersonCompensation({ employee, showToast }: { employee: Employee; showT
     }
     const { error } = await supabase.from(table as any).insert(payload as any)
     setSaving(false)
-    if (error) { showToast('Failed to save.', 'fail'); return }
+    if (error) { showToast('Failed to save: ' + error.message, 'fail'); return }
     showToast('Saved.')
     setAdding(false)
     const { data } = await supabase.from(table as any).select('*').eq('profile_id', employee.id).order('effective_from', { ascending: false })
@@ -669,15 +670,12 @@ function PersonCompensation({ employee, showToast }: { employee: Employee; showT
               </>
             ) : (
               <>
-                <div className="field-row">
-                  <div className="field"><label>Amount (INR per annum)</label><input className="inp" type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="e.g. 480000" /></div>
-                  <div className="field"><label>Frequency</label>
-                    <select className="inp" value={form.frequency} onChange={e => setForm(f => ({ ...f, frequency: e.target.value }))}>
-                      <option value="monthly">Monthly</option>
-                      <option value="annual">Annual</option>
-                    </select>
+                <div className="field"><label>Annual CTC (INR per annum)</label><input className="inp" type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} placeholder="e.g. 480000" /></div>
+                {form.amount && !isNaN(parseFloat(form.amount)) && (
+                  <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: -4 }}>
+                    ≈ {fmtMoney(Math.round(parseFloat(form.amount) / 12))} / month
                   </div>
-                </div>
+                )}
                 <div className="field"><label>Notes</label><input className="inp" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="e.g. Post-appraisal revision" /></div>
               </>
             )}
@@ -696,9 +694,9 @@ function PersonCompensation({ employee, showToast }: { employee: Employee; showT
           {records.map((r: any, i) => (
             <div key={r.id} className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{fmtMoney(r.amount)}</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{fmtMoney(r.amount)}{!isFreelancer && r.amount ? <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)' }}> / yr &nbsp;&bull;&nbsp; {fmtMoney(Math.round(r.amount / 12))} / mo</span> : null}</div>
                 <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                  {isFreelancer ? (r.rate_type?.replace(/_/g, ' ') || '') : (r.frequency || '')} &nbsp;&bull;&nbsp; From {fmtDate(r.effective_from)}
+                  {isFreelancer ? (r.rate_type?.replace(/_/g, ' ') || '') : 'Annual CTC'} &nbsp;&bull;&nbsp; From {fmtDate(r.effective_from)}
                   {(r.notes || r.scope_notes) && <> &nbsp;&bull;&nbsp; {r.notes || r.scope_notes}</>}
                 </div>
               </div>
@@ -724,18 +722,36 @@ function PersonKYC({ employee, showToast }: { employee: Employee; showToast: (m:
 
   useEffect(() => {
     supabase.from('employee_kyc').select('*').eq('profile_id', employee.id).maybeSingle().then(({ data }) => {
-      if (data) { setKyc(data); setForm({ ...data }) }
+      if (data) {
+        setKyc(data)
+        setForm({
+          aadhaar_number: data.aadhaar_number || '', pan_number: data.pan_number || '',
+          bank_name: data.bank_name || '', account_number: data.account_number || '', ifsc_code: data.ifsc_code || '',
+          date_of_birth: data.date_of_birth || '', blood_group: data.blood_group || '',
+          personal_email: data.personal_email || '', personal_phone: data.personal_phone || '',
+          permanent_address: data.permanent_address || '',
+          emergency_contact_name: data.emergency_contact_name || '',
+          emergency_contact_phone: data.emergency_contact_phone || '',
+          emergency_contact_relation: data.emergency_contact_relation || '',
+        })
+      }
     })
   }, [employee.id])
 
   async function save() {
     setSaving(true)
-    const payload = { ...form, profile_id: employee.id, updated_at: new Date().toISOString() }
+    // Coerce empty strings to null so date/optional columns don't reject ""
+    const clean: any = {}
+    for (const k of Object.keys(form)) {
+      const v = (form as any)[k]
+      clean[k] = (typeof v === 'string' && v.trim() === '') ? null : v
+    }
+    const payload = { ...clean, profile_id: employee.id, updated_at: new Date().toISOString() }
     const r = kyc
       ? await supabase.from('employee_kyc').update(payload).eq('id', kyc.id)
       : await supabase.from('employee_kyc').insert(payload)
     setSaving(false)
-    if (r.error) { showToast('Failed to save.', 'fail'); return }
+    if (r.error) { showToast('Failed to save: ' + r.error.message, 'fail'); return }
     showToast('KYC saved.')
     const { data } = await supabase.from('employee_kyc').select('*').eq('profile_id', employee.id).single()
     if (data) setKyc(data)
@@ -1275,8 +1291,8 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     )
     if (dt === 'appointment_letter') return (
       <>
-        {fMoney('monthly_ctc', 'Monthly CTC (gross)')}
-        {fMoney('confirmed_ctc', 'Post-confirmation CTC (if different)')}
+        {fMoney('monthly_ctc', 'Annual CTC (gross)')}
+        {fMoney('confirmed_ctc', 'Post-confirmation Annual CTC (if different)')}
         <div className="field-row">
           {f('probation_end_date', 'Probation End Date', 'date')}
           {f('reports_to_name', 'Reporting to', 'text', 'Auto-filled')}
@@ -1320,8 +1336,8 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     )
     if (dt === 'appraisal' || dt === 'salary_revision') return (
       <div className="field-row">
-        {fMoney('old_ctc', 'Previous CTC (/ month)')}
-        {fMoney('new_ctc', 'Revised CTC (/ month)')}
+        {fMoney('old_ctc', 'Previous Annual CTC')}
+        {fMoney('new_ctc', 'Revised Annual CTC')}
       </div>
     )
     if (dt === 'experience_letter') return (
