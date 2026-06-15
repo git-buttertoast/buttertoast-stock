@@ -435,6 +435,85 @@ ${sigSingle(p.signatory)}`
   return shell(content, s, ref, dateStr)
 }
 
+// ── DEVICE HANDOVER & LIABILITY AGREEMENT ─────────────────────────────────────
+// Records that a company-provided device has been entrusted to the employee for
+// custody, and sets out their liability for negligent damage / loss. Wording is
+// grounded in the Payment of Wages Act, 1936 (s.7(2)(c), s.10): liability is
+// limited to damage from the employee's own neglect/default, capped at actual
+// loss, with a mandatory "show cause" opportunity and the 50%-of-wages-per-cycle
+// statutory limit. VET WITH A LAWYER before relying on it for recovery.
+function deviceHandover(p: Record<string,any>, s: typeof LH_DEFAULTS) {
+  const ref = generateRef('device_handover', p.employee_name)
+  const dateStr = fmtDate(p.effective_date)
+  const dev = p.device || {}
+  const baseVal = dev.purchase_value ? num(dev.purchase_value) : null
+  const curVal = dev.current_value != null ? num(dev.current_value) : baseVal
+  const ratePct = dev.depreciation_rate != null ? Math.round(num(dev.depreciation_rate)! * 100) : 20
+  const valStr = baseVal != null ? `INR ${fmtMoney(baseVal)} (inclusive of GST)` : '[as per company records]'
+  const curValStr = curVal != null ? `INR ${fmtMoney(curVal)}` : '[as per company records]'
+  const rows: string[] = []
+  const row = (k: string, v: any) => { if (v) rows.push(`<tr><td>${k}</td><td>${v}</td></tr>`) }
+  row('Device Type', dev.device_type ? String(dev.device_type).replace(/_/g,' ').replace(/\b\w/g, (c:string)=>c.toUpperCase()) : '')
+  row('Make &amp; Model', [dev.make, dev.model].filter(Boolean).join(' '))
+  row('Serial Number', dev.serial_number)
+  row('IMEI', dev.imei)
+  row('Colour', dev.color)
+  row('Specifications', dev.specs)
+  row('Accessories Provided', dev.accessories)
+  row('Condition at Handover', dev.condition_at_handover ? String(dev.condition_at_handover).replace(/\b\w/g,(c:string)=>c.toUpperCase()) + (dev.condition_notes ? ` — ${dev.condition_notes}` : '') : '')
+  row('Original Value', valStr)
+  row('Current Assessed Value', curVal != null && baseVal != null && curVal !== baseVal ? `${curValStr} (after depreciation at ${ratePct}% per annum, reducing balance)` : curValStr)
+  row('Date of Handover', fmtDate(dev.assigned_date || p.effective_date))
+
+  const content = `
+<div class="doc-title">Device Handover &amp; Liability Agreement</div>
+<p>Dear <strong>${p.employee_name}</strong>,</p>
+<p>This agreement records the handover of a company-owned device to you for use in the course of your employment with Butter Toast, a creative division of HATCHX INDIA, and sets out your responsibilities in respect of that device.</p>
+<hr class="divider"/>
+<h3>1. Device Details</h3>
+<table class="terms" style="margin:12px 0;">${rows.join('')}</table>
+<hr class="divider"/>
+<h3>2. Ownership</h3>
+<p>The device described above remains, at all times, the sole and exclusive property of HATCHX INDIA (Butter Toast). It is entrusted to you solely for the purpose of performing your duties, and confers no ownership right upon you. You shall not sell, lend, pledge, modify, or part with possession of the device, nor install unauthorised software, without prior written approval from the company.</p>
+<hr class="divider"/>
+<h3>3. Care and Custody</h3>
+<p>You acknowledge that the device has been handed to you in the condition stated above and is in your custody. You agree to take reasonable and proper care of it, to use it only for lawful, work-related purposes, and to keep it secure against loss, theft, or damage.</p>
+<hr class="divider"/>
+<h3>4. Repairs</h3>
+<p>In the event the device requires repair, you shall promptly inform the company. Any repair shall be carried out <strong>only by the manufacturer or a manufacturer-authorised service centre</strong>, and not by any local or third-party repair shop. Repairs undertaken in breach of this clause shall be entirely at your own cost and risk, and may, at the company's discretion, be treated as further damage to the device.</p>
+<hr class="divider"/>
+<h3>5. Liability for Loss or Damage</h3>
+<p>Where the device is lost, or is damaged beyond normal wear and tear, and such loss or damage is <strong>directly attributable to your neglect, default, misuse, or breach of this agreement</strong>, you shall be liable to the company for:</p>
+<ul>
+  <li>the actual cost of repair (carried out by the manufacturer or a manufacturer-authorised service centre); or</li>
+  <li>where the device is lost or is beyond economical repair, an amount equal to the <strong>current assessed value of the device${curVal != null ? ` (presently ${curValStr})` : ''}</strong>, being its original value reduced by depreciation at ${ratePct}% per annum on a reducing-balance basis, as recalculated to the date of loss.</li>
+</ul>
+<p>Your liability shall not exceed the actual amount of the loss or damage so caused. <strong>Normal wear and tear, and any fault or failure not arising from your neglect or default, are expressly excluded</strong> from your liability.</p>
+<hr class="divider"/>
+<h3>6. Replacement of a Lost Device</h3>
+<p>In the event the device is lost and such loss is attributable to your neglect or default, the company may, instead of recovering the assessed value, require you to <strong>replace it with the same make and model</strong>. Where that model is no longer manufactured or available for sale, you shall replace it with an <strong>equivalent model of similar specification and standing that is currently available for sale</strong>, as reasonably determined by the company. Any replacement device shall become the property of the company.</p>
+<hr class="divider"/>
+<h3>7. Recovery of Amounts</h3>
+<p>Before any amount is recovered from you under Clause 5, the company shall give you a written notice describing the loss or damage and the amount proposed, and a reasonable opportunity to show cause as to why the recovery should not be made. Your explanation shall be considered in good faith.</p>
+<p>Following that opportunity, any amount determined to be payable by you may be recovered by deduction from your wages, subject to the limits prescribed by law (such deduction not exceeding fifty percent of the wages payable for the relevant wage period), with any remaining balance recoverable from subsequent wages, from your full and final settlement, or by such other lawful means as may be agreed.</p>
+<hr class="divider"/>
+<h3>8. Return of Device</h3>
+<p>You shall return the device, together with all accessories provided, in good working condition (subject to normal wear and tear), immediately upon: (a) the company's request; (b) the cessation of your employment for any reason; or (c) the device being replaced or withdrawn by the company. Failure to return the device shall entitle the company to recover its current assessed value in accordance with Clause 7.</p>
+<hr class="divider"/>
+<h3>9. Acknowledgment</h3>
+<p>By signing below, you confirm that you have received the device described above in the stated condition, that you have read and understood this agreement, and that you accept the responsibilities and liabilities set out herein.</p>
+<p style="margin-top:14px;">For HATCHX INDIA (Butter Toast)</p>
+${sigBoth()}
+<div class="accept">
+  <p style="font-size:11px;color:#555;">Acknowledgment &amp; Receipt by the Employee:</p>
+  <p style="font-size:11.5px;">I, <strong>${p.employee_name}</strong>, confirm receipt of the device described above and agree to the terms of this Device Handover &amp; Liability Agreement.</p>
+  <p style="font-size:11px;margin-top:16px;">Signature: _________________________</p>
+  <p style="font-size:11px;margin-top:8px;">Date: ____________________________</p>
+  <p style="font-size:11px;margin-top:8px;">Place: ___________________________</p>
+</div>`
+  return shell(content, s, ref, dateStr)
+}
+
 // ── SALARY REVISION ───────────────────────────────────────────────────────────
 function salaryRevision(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   const ref = generateRef('salary_revision', p.employee_name)
@@ -637,6 +716,7 @@ export async function POST(req: NextRequest) {
       internship_completion:     internshipCompletion,
       relieving_letter:          relievingLetter,
       warning_letter:            warningLetter,
+      device_handover:           deviceHandover,
     }
 
     const gen = generators[document_type]
