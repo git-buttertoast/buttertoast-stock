@@ -847,6 +847,7 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
   const [uploading, setUploading] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [uploadForm, setUploadForm] = useState({ document_type: 'other' as DocumentType, label: '', file: null as File | null })
+  const [expandedTypes, setExpandedTypes] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     supabase.from('employee_documents').select('*').eq('profile_id', employee.id).order('created_at', { ascending: false }).then(({ data }) => {
@@ -926,25 +927,53 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
       )}
       {loading ? <div className="empty-state"><div className="spinner" /></div> : docs.length === 0 ? (
         <div className="empty-state"><div className="empty-state-title">No documents yet</div><div className="empty-state-sub">Upload manually or generate from the Documents section.</div></div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {docs.map(d => (
-            <div key={d.id} className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{d.label || DOC_TYPE_LABELS[d.document_type] || d.document_type}</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                  v{d.version} &nbsp;&bull;&nbsp; {new Date(d.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  {d.status === 'signed' && <> &nbsp;&bull;&nbsp; <span style={{ color: 'var(--green)' }}>Signed</span></>}
-                </div>
+      ) : (() => {
+        // Split current vs superseded. Superseded are grouped by document_type
+        // and shown under a collapsible "Previous versions" section.
+        const current = docs.filter(d => d.is_current !== false)
+        const superseded = docs.filter(d => d.is_current === false)
+        const supBytype: Record<string, EmployeeDocument[]> = {}
+        superseded.forEach(d => { (supBytype[d.document_type] = supBytype[d.document_type] || []).push(d) })
+
+        const docRow = (d: EmployeeDocument, faded?: boolean) => (
+          <div key={d.id} className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: faded ? 0.6 : 1 }}>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                {d.label || DOC_TYPE_LABELS[d.document_type] || d.document_type}
+                {faded && <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--text3)', marginLeft: 8, padding: '1px 6px', border: '1px solid var(--border)', borderRadius: 10 }}>archived</span>}
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {d.file_url && <a className="btn btn-ghost btn-sm" href={d.file_url} target="_blank" rel="noreferrer">View</a>}
-                {d.signed_copy_url && <a className="btn btn-ghost btn-sm" href={d.signed_copy_url} target="_blank" rel="noreferrer">Signed copy</a>}
+              <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                v{d.version} &nbsp;&bull;&nbsp; {new Date(d.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                {d.status === 'signed' && <> &nbsp;&bull;&nbsp; <span style={{ color: 'var(--green)' }}>Signed</span></>}
+                {(d.metadata as any)?.supersede_reason && <> &nbsp;&bull;&nbsp; <span style={{ fontStyle: 'italic' }}>{(d.metadata as any).supersede_reason}</span></>}
               </div>
             </div>
-          ))}
-        </div>
-      )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              {d.file_url && <a className="btn btn-ghost btn-sm" href={d.file_url} target="_blank" rel="noreferrer">View</a>}
+              {d.signed_copy_url && <a className="btn btn-ghost btn-sm" href={d.signed_copy_url} target="_blank" rel="noreferrer">Signed copy</a>}
+            </div>
+          </div>
+        )
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {current.map(d => docRow(d, false))}
+            {Object.entries(supBytype).map(([type, list]) => (
+              <div key={type} style={{ marginTop: 4 }}>
+                <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, color: 'var(--text3)' }}
+                  onClick={() => setExpandedTypes(p => ({ ...p, [type]: !p[type] }))}>
+                  {expandedTypes[type] ? '▾' : '▸'} Previous versions of {DOC_TYPE_LABELS[type] || type.replace(/_/g, ' ')} ({list.length})
+                </button>
+                {expandedTypes[type] && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                    {list.map(d => docRow(d, true))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )
+      })()}
     </div>
   )
 }
@@ -1178,6 +1207,10 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
   const [generating, setGenerating] = useState(false)
   const [loadingComp, setLoadingComp] = useState(false)
   const [duties, setDuties] = useState('')
+  // Versioning guard modals
+  const [supersedePrompt, setSupersedePrompt] = useState<{ existing: any } | null>(null)
+  const [supersedeReason, setSupersedeReason] = useState('')
+  const [appraisalWarn, setAppraisalWarn] = useState<{ monthsAgo: number; lastDate: string } | null>(null)
 
   const dt = form.document_type
   const emp = employees.find(e => e.id === form.profile_id)
@@ -1243,11 +1276,55 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     }
   }, [form.profile_id])
 
+  const ONE_TIME_TYPES = ['offer_letter', 'internship_offer', 'appointment_letter', 'internship_appointment']
+
+  // Entry point: run versioning guards, then either open a modal or generate.
   async function generate() {
     if (!form.profile_id) { showToast('Select an employee.', 'fail'); return }
     if (dt === 'warning_letter' && !form.notes.trim()) {
       showToast('Warning letter requires details in the Notes field.', 'fail'); return
     }
+
+    // One-time docs: if a current copy already exists, ask WHY before replacing.
+    if (ONE_TIME_TYPES.includes(dt)) {
+      const { data: existing } = await supabase.from('employee_documents')
+        .select('id, version, generated_at')
+        .eq('document_type', dt)
+        .eq('is_current', true)
+        .eq('profile_id', form.profile_id)
+        .limit(1)
+      if (existing && existing.length) {
+        setSupersedeReason('')
+        setSupersedePrompt({ existing: existing[0] })
+        return // wait for the reason modal
+      }
+    }
+
+    // Appraisal: if the last one was under 6 months ago, soft-confirm first.
+    if (dt === 'appraisal') {
+      const { data: lastApp } = await supabase.from('employee_documents')
+        .select('generated_at')
+        .eq('document_type', 'appraisal')
+        .eq('profile_id', form.profile_id)
+        .order('generated_at', { ascending: false })
+        .limit(1)
+      const last = lastApp?.[0]?.generated_at
+      if (last) {
+        const monthsAgo = (Date.now() - new Date(last).getTime()) / (1000 * 60 * 60 * 24 * 30.44)
+        if (monthsAgo < 6) {
+          setAppraisalWarn({ monthsAgo: Math.round(monthsAgo * 10) / 10, lastDate: last })
+          return // wait for the confirm modal
+        }
+      }
+    }
+
+    doGenerate('')
+  }
+
+  // The actual generation + API call. `reason` is the supersede reason (one-time docs).
+  async function doGenerate(reason: string) {
+    setSupersedePrompt(null)
+    setAppraisalWarn(null)
     setGenerating(true)
     // Get drive folder
     const { data: epFolder } = await supabase.from('employee_profiles').select('drive_folder_url').eq('id', form.profile_id).maybeSingle()
@@ -1262,6 +1339,7 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...form, duties: form.duties || duties, drive_folder_id: driveFolderId,
+        supersede_reason: reason || null,
         probation_ctc:  form.probation_ctc  ? parseFloat(form.probation_ctc)  : null,
         confirmed_ctc:  form.confirmed_ctc  ? parseFloat(form.confirmed_ctc)  : null,
         monthly_ctc:    form.monthly_ctc    ? parseFloat(form.monthly_ctc)    : null,
@@ -1456,6 +1534,65 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
           </button>
         </div>
       </div>
+
+      {/* Supersede-reason modal (one-time docs being replaced) */}
+      {supersedePrompt && (
+        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setSupersedePrompt(null)} style={{ zIndex: 300 }}>
+          <div className="modal" style={{ maxWidth: 440 }}>
+            <div className="modal-header">
+              <div>
+                <div className="modal-title">Replace existing document?</div>
+                <div className="modal-sub">A current {DOC_TYPE_LABELS[dt] || dt.replace(/_/g, ' ')} already exists for this employee.</div>
+              </div>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 14, lineHeight: 1.5 }}>
+                Generating a new one will archive the existing version (kept in history) and make this the current copy. Please note why it's being replaced.
+              </p>
+              <div className="field">
+                <label>Reason for replacement</label>
+                <textarea className="inp" value={supersedeReason}
+                  onChange={e => setSupersedeReason(e.target.value)} rows={3}
+                  placeholder="e.g. Corrected joining date / revised CTC / fixed typo in designation" />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setSupersedePrompt(null)}>Cancel</button>
+              <button className="btn btn-primary" disabled={!supersedeReason.trim() || generating}
+                onClick={() => doGenerate(supersedeReason.trim())}>
+                {generating ? <><div className="spinner" /><span>Generating...</span></> : 'Replace & Generate'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Appraisal recency soft-warning */}
+      {appraisalWarn && (
+        <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && setAppraisalWarn(null)} style={{ zIndex: 300 }}>
+          <div className="modal" style={{ maxWidth: 440 }}>
+            <div className="modal-header">
+              <div>
+                <div className="modal-title">Recent appraisal on file</div>
+                <div className="modal-sub">Last appraisal was {appraisalWarn.monthsAgo} month{appraisalWarn.monthsAgo === 1 ? '' : 's'} ago.</div>
+              </div>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: 13, color: 'var(--text-soft)', lineHeight: 1.5 }}>
+                This employee was last appraised on{' '}
+                <strong>{new Date(appraisalWarn.lastDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</strong>,
+                which is under 6 months ago. Appraisals are usually spaced further apart. Generate another one anyway?
+              </p>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setAppraisalWarn(null)}>Cancel</button>
+              <button className="btn btn-primary" disabled={generating} onClick={() => doGenerate('')}>
+                {generating ? <><div className="spinner" /><span>Generating...</span></> : 'Generate Anyway'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
