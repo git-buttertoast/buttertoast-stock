@@ -660,16 +660,48 @@ export async function POST(req: NextRequest) {
       } catch (e) { console.error('Drive upload failed:', e) }
     }
 
+    // ── Versioning rules by document type ────────────────────────────────────
+    // One-time documents (offer / appointment letters) supersede: an employee
+    // should hold ONE current copy. Regenerating flips the old one to
+    // is_current=false, bumps the version, and records WHY it was replaced.
+    // Repeatable documents (appraisal, salary_revision, warning, etc.) just add
+    // a new row each time — they are genuine history, not replacements.
+    const ONE_TIME_TYPES = ['offer_letter', 'internship_offer', 'appointment_letter', 'internship_appointment']
+    let newVersion = 1
+    const supersedeReason = (body.supersede_reason || '').trim()
+
+    if (ONE_TIME_TYPES.includes(document_type)) {
+      // Find an existing current doc of this type for the same person
+      // (match on profile_id when present, else candidate_id).
+      let q = supabase.from('employee_documents')
+        .select('id, version')
+        .eq('document_type', document_type)
+        .eq('is_current', true)
+      if (profile_id) q = q.eq('profile_id', profile_id)
+      else if (candidate_id) q = q.eq('candidate_id', candidate_id)
+      const { data: existingCurrent } = await q
+
+      if (existingCurrent && existingCurrent.length) {
+        // Supersede every current copy (normally just one) and compute next version.
+        const maxVer = existingCurrent.reduce((m: number, r: any) => Math.max(m, r.version || 1), 0)
+        newVersion = maxVer + 1
+        const ids = existingCurrent.map((r: any) => r.id)
+        await supabase.from('employee_documents')
+          .update({ is_current: false })
+          .in('id', ids)
+      }
+    }
+
     await supabase.from('employee_documents').insert({
       profile_id: profile_id || null,
       candidate_id: candidate_id || null,
       document_type,
       label: label || null,
-      version: 1,
+      version: newVersion,
       status: 'generated',
       file_url: driveLink,
       is_current: true,
-      metadata: p,
+      metadata: supersedeReason ? { ...p, supersede_reason: supersedeReason } : p,
       generated_at: new Date().toISOString(),
     })
 
