@@ -691,18 +691,44 @@ function PersonCompensation({ employee, showToast }: { employee: Employee; showT
         <div className="empty-state"><div className="empty-state-title">No records yet</div><div className="empty-state-sub">Add the first entry above.</div></div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {records.map((r: any, i) => (
-            <div key={r.id} className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{fmtMoney(r.amount)}{!isFreelancer && r.amount ? <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)' }}> / yr &nbsp;&bull;&nbsp; {fmtMoney(Math.round(r.amount / 12))} / mo</span> : null}</div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
-                  {isFreelancer ? (r.rate_type?.replace(/_/g, ' ') || '') : 'Annual CTC'} &nbsp;&bull;&nbsp; From {fmtDate(r.effective_from)}
-                  {(r.notes || r.scope_notes) && <> &nbsp;&bull;&nbsp; {r.notes || r.scope_notes}</>}
+          {(() => {
+            // "Current" = the record whose effective range contains today, not simply
+            // the newest effective_from (a future-dated raise must not show as current).
+            const today = new Date().toISOString().split('T')[0]
+            let currentId: string | null = null
+            for (const r of records) {
+              const startsOk = !r.effective_from || r.effective_from <= today
+              const endsOk = !r.effective_to || r.effective_to >= today
+              if (startsOk && endsOk) { currentId = r.id; break }
+            }
+            // Fallback: if nothing matches today (e.g. all future-dated), mark the
+            // earliest upcoming record so something is highlighted.
+            if (!currentId && records.length) {
+              const upcoming = [...records].filter((r: any) => r.effective_from && r.effective_from > today)
+                .sort((a: any, b: any) => a.effective_from.localeCompare(b.effective_from))[0]
+              currentId = upcoming ? upcoming.id : records[records.length - 1].id
+            }
+            return records.map((r: any) => {
+              const isFuture = r.effective_from && r.effective_from > today
+              return (
+                <div key={r.id} className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: (r.id !== currentId && isFuture) ? 0.6 : 1 }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{fmtMoney(r.amount)}{!isFreelancer && r.amount ? <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)' }}> / yr &nbsp;&bull;&nbsp; {fmtMoney(Math.round(r.amount / 12))} / mo</span> : null}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>
+                      {isFreelancer ? (r.rate_type?.replace(/_/g, ' ') || '') : 'Annual CTC'} &nbsp;&bull;&nbsp; From {fmtDate(r.effective_from)}
+                      {r.effective_to && <> &nbsp;to&nbsp; {fmtDate(r.effective_to)}</>}
+                      {(r.notes || r.scope_notes) && <> &nbsp;&bull;&nbsp; {r.notes || r.scope_notes}</>}
+                    </div>
+                  </div>
+                  {r.id === currentId
+                    ? <span className="badge badge-active">Current</span>
+                    : isFuture
+                      ? <span className="badge" style={{ background: 'var(--bg3)', color: 'var(--text3)' }}>Upcoming</span>
+                      : <span className="badge" style={{ background: 'var(--bg3)', color: 'var(--text3)' }}>Past</span>}
                 </div>
-              </div>
-              {i === 0 && <span className="badge badge-active">Current</span>}
-            </div>
-          ))}
+              )
+            })
+          })()}
         </div>
       )}
     </div>
