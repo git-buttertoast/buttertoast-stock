@@ -1305,9 +1305,9 @@ function ReassignModal({ device, fromName, employees, onClose, onDone, showToast
   showToast: (m: string, t?: 'ok' | 'fail') => void
 }) {
   const [toId, setToId] = useState('')
-  const [returnCondition, setReturnCondition] = useState(device.condition_at_handover || 'good')
+  const [returnCondition, setReturnCondition] = useState<string>(device.condition_at_handover || 'good')
   const [returnNotes, setReturnNotes] = useState('')
-  const [newCondition, setNewCondition] = useState(device.condition_at_handover || 'good')
+  const [newCondition, setNewCondition] = useState<string>(device.condition_at_handover || 'good')
   const [newNotes, setNewNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
