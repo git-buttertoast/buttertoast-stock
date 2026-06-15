@@ -2,11 +2,11 @@
 export const dynamic = 'force-dynamic'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { DEPT_DISPLAY, DOC_TYPE_LABELS } from '@/lib/types'
+import { DEPT_DISPLAY, DOC_TYPE_LABELS, DEVICE_DEPRECIATION_DEFAULTS, depreciatedValue } from '@/lib/types'
 import type {
   Employee, EmployeeProfile, EmployeeKYC,
   EmployeeCompensation, FreelancerRateCard, EmployeeDocument,
-  EmployeeType, DocumentType
+  EmployeeType, DocumentType, EmployeeDevice
 } from '@/lib/types'
 
 // ── iOS-safe date input (overlay pattern) ──
@@ -45,7 +45,7 @@ let toastId = 0
 export default function StockApp() {
   const [user, setUser] = useState<{ id: string; full_name: string; role: string } | null>(null)
   const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState<'people' | 'onboarding' | 'documents' | 'settings'>('people')
+  const [page, setPage] = useState<'people' | 'onboarding' | 'documents' | 'devices' | 'settings'>('people')
   const [toasts, setToasts] = useState<Toast[]>([])
 
   function showToast(msg: string, type: 'ok' | 'fail' = 'ok') {
@@ -96,6 +96,7 @@ export default function StockApp() {
           <NavBtn active={page === 'people'} onClick={() => setPage('people')} icon={<PeopleIcon />}>People</NavBtn>
           <NavBtn active={page === 'onboarding'} onClick={() => setPage('onboarding')} icon={<OnboardingIcon />}>Onboarding</NavBtn>
           <NavBtn active={page === 'documents'} onClick={() => setPage('documents')} icon={<DocIcon />}>Documents</NavBtn>
+          <NavBtn active={page === 'devices'} onClick={() => setPage('devices')} icon={<DeviceIcon />}>Devices</NavBtn>
           <div className="nav-section">Admin</div>
           <NavBtn active={page === 'settings'} onClick={() => setPage('settings')} icon={<SettingsIcon />}>Settings</NavBtn>
           <div className="nav-section">Quick Links</div>
@@ -123,6 +124,7 @@ export default function StockApp() {
         {page === 'people' && <PeoplePage user={user} showToast={showToast} />}
         {page === 'onboarding' && <OnboardingPage user={user} showToast={showToast} />}
         {page === 'documents' && <DocumentsPage user={user} showToast={showToast} />}
+        {page === 'devices' && <DevicesPage user={user} showToast={showToast} />}
         {page === 'settings' && <SettingsPage showToast={showToast} />}
       </main>
 
@@ -183,7 +185,7 @@ function PeoplePage({ user, showToast }: { user: { id: string; full_name: string
   const [typeFilter, setTypeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('active')
   const [selected, setSelected] = useState<Employee | null>(null)
-  const [drawerTab, setDrawerTab] = useState<'details' | 'compensation' | 'kyc' | 'documents'>('details')
+  const [drawerTab, setDrawerTab] = useState<'details' | 'compensation' | 'kyc' | 'documents' | 'devices'>('details')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -291,8 +293,8 @@ function PeoplePage({ user, showToast }: { user: { id: string; full_name: string
 // ── Person Drawer ───────────────────────────────────────────────────────────
 function PersonDrawer({ employee, tab, onTabChange, onClose, onRefresh, showToast }: {
   employee: Employee
-  tab: 'details' | 'compensation' | 'kyc' | 'documents'
-  onTabChange: (t: 'details' | 'compensation' | 'kyc' | 'documents') => void
+  tab: 'details' | 'compensation' | 'kyc' | 'documents' | 'devices'
+  onTabChange: (t: 'details' | 'compensation' | 'kyc' | 'documents' | 'devices') => void
   onClose: () => void
   onRefresh: () => void
   showToast: (m: string, t?: 'ok' | 'fail') => void
@@ -312,9 +314,9 @@ function PersonDrawer({ employee, tab, onTabChange, onClose, onRefresh, showToas
           </div>
           <button className="close-btn" onClick={onClose}>&times;</button>
         </div>
-        <div className="tabs" style={{ padding: '0 24px', marginBottom: 0 }}>
-          {(['details', 'compensation', 'kyc', 'documents'] as const).map(t => (
-            <button key={t} className={`tab-btn${tab === t ? ' active' : ''}`} onClick={() => onTabChange(t)} style={{ textTransform: 'capitalize' }}>{t}</button>
+        <div className="tabs" style={{ padding: '0 24px', marginBottom: 0, overflowX: 'auto', flexWrap: 'nowrap', whiteSpace: 'nowrap', WebkitOverflowScrolling: 'touch' }}>
+          {(['details', 'compensation', 'kyc', 'documents', 'devices'] as const).map(t => (
+            <button key={t} className={`tab-btn${tab === t ? ' active' : ''}`} onClick={() => onTabChange(t)} style={{ textTransform: 'capitalize', flexShrink: 0 }}>{t}</button>
           ))}
         </div>
         <div style={{ overflowY: 'auto', flex: 1, padding: '20px 24px' }}>
@@ -322,6 +324,7 @@ function PersonDrawer({ employee, tab, onTabChange, onClose, onRefresh, showToas
           {tab === 'compensation' && <PersonCompensation employee={employee} showToast={showToast} />}
           {tab === 'kyc' && <PersonKYC employee={employee} showToast={showToast} />}
           {tab === 'documents' && <PersonDocuments employee={employee} showToast={showToast} />}
+          {tab === 'devices' && <PersonDevices employee={employee} showToast={showToast} />}
         </div>
       </div>
     </div>
@@ -978,6 +981,415 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
   )
 }
 
+// ── Person Devices Tab ──────────────────────────────────────────────────────
+const DEVICE_TYPES = ['laptop','desktop','phone','tablet','monitor','other'] as const
+const DEVICE_STATUS_LABELS: Record<string,string> = {
+  assigned: 'Assigned', unassigned: 'In pool', returned: 'Returned',
+  lost: 'Lost', damaged: 'Damaged', retired: 'Retired',
+}
+const DEVICE_STATUS_COLOR: Record<string,string> = {
+  assigned: 'var(--green)', returned: 'var(--text3)', unassigned: 'var(--text3)',
+  lost: 'var(--red)', damaged: '#d98324', retired: 'var(--text3)',
+}
+
+function inr(n: number | null | undefined) {
+  if (n == null) return '—'
+  return '₹' + Number(n).toLocaleString('en-IN')
+}
+
+function PersonDevices({ employee, showToast }: { employee: Employee; showToast: (m: string, t?: 'ok' | 'fail') => void }) {
+  const [devices, setDevices] = useState<EmployeeDevice[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState<EmployeeDevice | null>(null)
+  const [showForm, setShowForm] = useState(false)
+  const [generating, setGenerating] = useState<string | null>(null)
+  const [reassign, setReassign] = useState<EmployeeDevice | null>(null)
+  const [allEmployees, setAllEmployees] = useState<{ id: string; full_name: string }[]>([])
+
+  const blank = {
+    ownership: 'company', device_type: 'laptop', make: '', model: '', serial_number: '',
+    imei: '', color: '', specs: '', accessories: '', purchase_value: '', purchase_date: '',
+    date_added: new Date().toISOString().split('T')[0], depreciation_rate: '0.20',
+    condition_at_handover: 'good', condition_notes: '', status: 'assigned',
+    assigned_date: new Date().toISOString().split('T')[0], notes: '',
+  }
+  const [form, setForm] = useState<Record<string, string>>(blank)
+
+  const load = useCallback(() => {
+    setLoading(true)
+    supabase.from('employee_devices').select('*').eq('profile_id', employee.id)
+      .order('created_at', { ascending: false }).then(({ data }) => {
+        setDevices((data as EmployeeDevice[]) || [])
+        setLoading(false)
+      })
+  }, [employee.id])
+  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    supabase.from('profiles').select('id, full_name').eq('is_active', true).order('full_name')
+      .then(({ data }) => setAllEmployees((data as any[]) || []))
+  }, [])
+
+  function defaultRate(type: string) { return String(DEVICE_DEPRECIATION_DEFAULTS[type] ?? 0.20) }
+
+  function openAdd() { setEditing(null); setForm({ ...blank }); setShowForm(true) }
+  function openEdit(d: EmployeeDevice) {
+    setEditing(d)
+    setForm({
+      ownership: d.ownership, device_type: d.device_type, make: d.make || '', model: d.model || '',
+      serial_number: d.serial_number || '', imei: d.imei || '', color: d.color || '',
+      specs: d.specs || '', accessories: d.accessories || '',
+      purchase_value: d.purchase_value != null ? String(d.purchase_value) : '',
+      purchase_date: d.purchase_date || '', date_added: d.date_added || '',
+      depreciation_rate: d.depreciation_rate != null ? String(d.depreciation_rate) : '0.20',
+      condition_at_handover: d.condition_at_handover || 'good',
+      condition_notes: d.condition_notes || '', status: d.status,
+      assigned_date: d.assigned_date || '', notes: d.notes || '',
+    })
+    setShowForm(true)
+  }
+
+  async function save() {
+    if (!form.make && !form.model) { showToast('Add at least a make or model.', 'fail'); return }
+    const payload: Record<string, any> = {
+      profile_id: employee.id,
+      ownership: form.ownership,
+      device_type: form.device_type,
+      make: form.make.trim() || null,
+      model: form.model.trim() || null,
+      serial_number: form.serial_number.trim() || null,
+      imei: form.imei.trim() || null,
+      color: form.color.trim() || null,
+      specs: form.specs.trim() || null,
+      accessories: form.accessories.trim() || null,
+      purchase_value: form.purchase_value ? parseFloat(form.purchase_value) : null,
+      purchase_date: form.purchase_date || null,
+      date_added: form.date_added || null,
+      depreciation_rate: form.depreciation_rate ? parseFloat(form.depreciation_rate) : 0.20,
+      condition_at_handover: form.condition_at_handover,
+      condition_notes: form.condition_notes.trim() || null,
+      status: form.status,
+      assigned_date: form.assigned_date || null,
+      notes: form.notes.trim() || null,
+    }
+    let deviceId = editing?.id
+    if (editing) {
+      const res = await supabase.from('employee_devices').update(payload).eq('id', editing.id)
+      if (res.error) { showToast('Could not save device: ' + res.error.message, 'fail'); return }
+    } else {
+      const res = await supabase.from('employee_devices').insert(payload).select('id').single()
+      if (res.error || !res.data) { showToast('Could not save device: ' + (res.error?.message || 'unknown'), 'fail'); return }
+      deviceId = res.data.id
+    }
+    if (deviceId) {
+      await supabase.from('device_history').insert({
+        device_id: deviceId, profile_id: employee.id,
+        event: editing ? 'condition_change' : 'assigned',
+        detail: editing ? 'Device record updated' : `${form.make} ${form.model}`.trim() + ' assigned',
+        condition: form.condition_at_handover,
+      })
+    }
+    showToast(editing ? 'Device updated.' : 'Device added.')
+    setShowForm(false)
+    load()
+  }
+
+  async function setStatus(d: EmployeeDevice, status: string, extra?: Record<string, any>) {
+    const patch: Record<string, any> = { status, ...(extra || {}) }
+    const res = await supabase.from('employee_devices').update(patch).eq('id', d.id)
+    if (res.error) { showToast('Could not update status.', 'fail'); return }
+    await supabase.from('device_history').insert({
+      device_id: d.id, profile_id: employee.id, event: status,
+      detail: `Marked ${DEVICE_STATUS_LABELS[status] || status}`,
+    })
+    showToast(`Marked ${DEVICE_STATUS_LABELS[status] || status}.`)
+    load()
+  }
+
+  // Return to pool: device leaves this holder, becomes unassigned/in-pool.
+  async function returnToPool(d: EmployeeDevice) {
+    const today = new Date().toISOString().split('T')[0]
+    const res = await supabase.from('employee_devices')
+      .update({ status: 'unassigned', profile_id: null, returned_date: today }).eq('id', d.id)
+    if (res.error) { showToast('Could not return to pool.', 'fail'); return }
+    await supabase.from('device_history').insert({
+      device_id: d.id, profile_id: employee.id, event: 'returned',
+      detail: 'Returned to pool', condition: d.condition_at_handover, event_date: today,
+    })
+    showToast('Returned to pool.')
+    load()
+  }
+
+  // Generate the device handover & liability agreement for a company device.
+  async function generateHandover(d: EmployeeDevice) {
+    if (d.ownership !== 'company') { showToast('Liability agreements are only for company devices.', 'fail'); return }
+    setGenerating(d.id)
+    const { data: epFolder } = await supabase.from('employee_profiles').select('drive_folder_url').eq('id', employee.id).maybeSingle()
+    const { data: obFolder } = !epFolder?.drive_folder_url
+      ? await supabase.from('scout_onboarding').select('drive_folder_url').eq('employee_id', employee.id).maybeSingle()
+      : { data: null }
+    const folderUrl = epFolder?.drive_folder_url || obFolder?.drive_folder_url || null
+    const fMatch = folderUrl ? folderUrl.match(/folders\/([a-zA-Z0-9_-]+)/) : null
+    const driveFolderId = fMatch ? fMatch[1] : null
+    // Live depreciated value passed to the agreement.
+    const depVal = depreciatedValue(d.purchase_value, d.depreciation_rate, d.date_added)
+    const res = await fetch('/api/generate-pdf', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        document_type: 'device_handover',
+        profile_id: employee.id,
+        employee_name: employee.full_name,
+        effective_date: new Date().toISOString().split('T')[0],
+        signatory: 'aakash',
+        drive_folder_id: driveFolderId,
+        label: `${d.make || ''} ${d.model || ''}`.trim() || 'Device',
+        device: { ...d, current_value: depVal },
+      })
+    })
+    const data = await res.json()
+    setGenerating(null)
+    if (!data.html) { showToast(data.error || 'Generation failed.', 'fail'); return }
+    const { data: docRow } = await supabase.from('employee_documents')
+      .select('id').eq('profile_id', employee.id).eq('document_type', 'device_handover')
+      .order('created_at', { ascending: false }).limit(1).maybeSingle()
+    if (docRow?.id) await supabase.from('employee_devices').update({ liability_document_id: docRow.id }).eq('id', d.id)
+    sessionStorage.setItem('bt_print_html', data.html)
+    window.location.href = '/print'
+  }
+
+  const fld = (key: string, label: string, type = 'text', ph = '') => (
+    <div className="field"><label>{label}</label>
+      <input className="inp" type={type} value={form[key] || ''} placeholder={ph}
+        onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))} /></div>
+  )
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div className="section-title">Devices</div>
+        <button className="btn btn-ghost btn-sm" onClick={openAdd}>+ Add device</button>
+      </div>
+
+      {showForm && (
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="field-row">
+              <div className="field"><label>Ownership</label>
+                <select className="inp" value={form.ownership} onChange={e => setForm(f => ({ ...f, ownership: e.target.value }))}>
+                  <option value="company">Company-provided</option>
+                  <option value="personal">Personal (BYOD)</option>
+                </select>
+              </div>
+              <div className="field"><label>Type</label>
+                <select className="inp" value={form.device_type}
+                  onChange={e => { const t = e.target.value; setForm(f => ({ ...f, device_type: t, depreciation_rate: defaultRate(t) })) }}>
+                  {DEVICE_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="field-row">{fld('make', 'Make', 'text', 'e.g. Apple')}{fld('model', 'Model', 'text', 'e.g. MacBook Air M2')}</div>
+            <div className="field-row">{fld('serial_number', 'Serial number')}{fld('imei', 'IMEI (phones/tablets)')}</div>
+            <div className="field-row">{fld('color', 'Colour')}{fld('specs', 'Specs', 'text', 'RAM / storage / CPU')}</div>
+            {fld('accessories', 'Bundled accessories', 'text', 'charger, case, dongle (came with device)')}
+            {form.ownership === 'company' && (
+              <>
+                <div className="field-row">{fld('purchase_value', 'Value incl. GST (₹)', 'number', 'e.g. 95000')}{fld('date_added', 'Date added to company', 'date')}</div>
+                <div className="field-row">
+                  <div className="field"><label>Depreciation rate / yr</label>
+                    <input className="inp" type="number" step="0.01" min="0" max="1" value={form.depreciation_rate}
+                      onChange={e => setForm(f => ({ ...f, depreciation_rate: e.target.value }))} />
+                  </div>
+                  <div className="field"><label>&nbsp;</label>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', padding: '9px 0' }}>
+                      {form.purchase_value && form.date_added
+                        ? `Current value ≈ ${inr(depreciatedValue(parseFloat(form.purchase_value), parseFloat(form.depreciation_rate || '0.2'), form.date_added))}`
+                        : 'Reducing balance, computed live'}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+            <div className="field-row">
+              <div className="field"><label>Condition at handover</label>
+                <select className="inp" value={form.condition_at_handover} onChange={e => setForm(f => ({ ...f, condition_at_handover: e.target.value }))}>
+                  <option value="new">New</option><option value="good">Good</option>
+                  <option value="fair">Fair</option><option value="poor">Poor</option>
+                </select>
+              </div>
+              <div className="field"><label>Status</label>
+                <select className="inp" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
+                  {Object.entries(DEVICE_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+            </div>
+            {fld('condition_notes', 'Condition notes', 'text', 'e.g. small scratch on lid')}
+            {fld('assigned_date', 'Date assigned to this person', 'date')}
+            {fld('notes', 'Admin notes')}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowForm(false)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={save}>{editing ? 'Save changes' : 'Add device'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {loading ? <div className="empty-state"><div className="spinner" /></div> : devices.length === 0 ? (
+        <div className="empty-state"><div className="empty-state-title">No devices recorded</div><div className="empty-state-sub">Add a company-provided or personal device.</div></div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {devices.map(d => {
+            const depVal = depreciatedValue(d.purchase_value, d.depreciation_rate, d.date_added)
+            return (
+              <div key={d.id} className="card" style={{ padding: '14px 16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
+                      {[d.make, d.model].filter(Boolean).join(' ') || (d.device_type.charAt(0).toUpperCase() + d.device_type.slice(1))}
+                      <span style={{ fontSize: 10, fontWeight: 500, marginLeft: 8, padding: '1px 7px', borderRadius: 10, border: '1px solid var(--border)', color: 'var(--text3)' }}>
+                        {d.ownership === 'company' ? 'Company' : 'Personal'}
+                      </span>
+                      <span style={{ fontSize: 10, fontWeight: 600, marginLeft: 6, color: DEVICE_STATUS_COLOR[d.status] || 'var(--text3)' }}>
+                        {DEVICE_STATUS_LABELS[d.status] || d.status}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3, lineHeight: 1.5 }}>
+                      {d.device_type}{d.serial_number ? ` · SN ${d.serial_number}` : ''}{d.imei ? ` · IMEI ${d.imei}` : ''}
+                      {d.accessories ? ` · incl. ${d.accessories}` : ''}
+                    </div>
+                    {d.ownership === 'company' && d.purchase_value != null && (
+                      <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 3 }}>
+                        {inr(d.purchase_value)} incl. GST · <strong>now ≈ {inr(depVal)}</strong>
+                        <span style={{ color: 'var(--text3)' }}> ({Math.round((d.depreciation_rate || 0.2) * 100)}%/yr)</span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {d.ownership === 'company' && (
+                      <button className="btn btn-ghost btn-sm" disabled={generating === d.id} onClick={() => generateHandover(d)}>
+                        {generating === d.id ? 'Generating...' : (d.liability_document_id ? 'Re-generate agreement' : 'Generate agreement')}
+                      </button>
+                    )}
+                    <button className="btn btn-ghost btn-sm" onClick={() => openEdit(d)}>Edit</button>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => setReassign(d)}>Reassign</button>
+                  {d.status === 'assigned' && <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => returnToPool(d)}>Return to pool</button>}
+                  {d.status !== 'damaged' && <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => setStatus(d, 'damaged')}>Mark damaged</button>}
+                  {d.status !== 'lost' && <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => setStatus(d, 'lost')}>Mark lost</button>}
+                  {d.status !== 'retired' && <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={() => setStatus(d, 'retired')}>Retire</button>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {reassign && (
+        <ReassignModal device={reassign} fromName={employee.full_name} employees={allEmployees}
+          onClose={() => setReassign(null)} onDone={() => { setReassign(null); load() }} showToast={showToast} />
+      )}
+    </div>
+  )
+}
+
+// ── Reassign device modal ───────────────────────────────────────────────────
+// Records the return from the current holder (with return condition — their
+// liability agreement stays valid until this point), then the handover to the
+// new holder (new condition baseline). Writes both history events.
+function ReassignModal({ device, fromName, employees, onClose, onDone, showToast }: {
+  device: EmployeeDevice
+  fromName: string
+  employees: { id: string; full_name: string }[]
+  onClose: () => void
+  onDone: () => void
+  showToast: (m: string, t?: 'ok' | 'fail') => void
+}) {
+  const [toId, setToId] = useState('')
+  const [returnCondition, setReturnCondition] = useState(device.condition_at_handover || 'good')
+  const [returnNotes, setReturnNotes] = useState('')
+  const [newCondition, setNewCondition] = useState(device.condition_at_handover || 'good')
+  const [newNotes, setNewNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  async function doReassign() {
+    if (!toId) { showToast('Select who it is moving to.', 'fail'); return }
+    setSaving(true)
+    const today = new Date().toISOString().split('T')[0]
+    // 1. Record return from old holder (their agreement was valid until this point).
+    await supabase.from('device_history').insert({
+      device_id: device.id, profile_id: device.profile_id, event: 'returned',
+      detail: `Returned by ${fromName}` + (returnNotes ? ` — ${returnNotes}` : ''),
+      condition: returnCondition, event_date: today,
+    })
+    // 2. Move device to new holder with new condition baseline. Clear the old
+    //    liability link so a fresh agreement is generated for the new holder.
+    const res = await supabase.from('employee_devices').update({
+      profile_id: toId, status: 'assigned', assigned_date: today, returned_date: null,
+      condition_at_handover: newCondition, condition_notes: newNotes || null,
+      liability_document_id: null,
+    }).eq('id', device.id)
+    if (res.error) { setSaving(false); showToast('Reassign failed: ' + res.error.message, 'fail'); return }
+    // 3. Record handover to new holder.
+    await supabase.from('device_history').insert({
+      device_id: device.id, profile_id: toId, event: 'reassigned',
+      detail: `Reassigned to new holder` + (newNotes ? ` — ${newNotes}` : ''),
+      condition: newCondition, event_date: today,
+    })
+    setSaving(false)
+    showToast('Device reassigned. Generate a new agreement for the new holder.')
+    onDone()
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()} style={{ zIndex: 300 }}>
+      <div className="modal" style={{ maxWidth: 460 }}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">Reassign device</div>
+            <div className="modal-sub">{[device.make, device.model].filter(Boolean).join(' ')} — currently with {fromName}</div>
+          </div>
+        </div>
+        <div className="modal-body">
+          <p style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 4, lineHeight: 1.5 }}>
+            {fromName}&apos;s liability agreement remains valid until this handover is recorded. Capture the condition it came back in before it moves on.
+          </p>
+          <div className="field"><label>Return condition (from {fromName})</label>
+            <select className="inp" value={returnCondition} onChange={e => setReturnCondition(e.target.value)}>
+              <option value="new">New</option><option value="good">Good</option>
+              <option value="fair">Fair</option><option value="poor">Poor</option>
+            </select>
+          </div>
+          <div className="field"><label>Return notes (any new damage?)</label>
+            <input className="inp" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="e.g. dent on lid corner — pre-existing or new?" />
+          </div>
+          <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '6px 0' }} />
+          <div className="field"><label>Reassign to</label>
+            <select className="inp" value={toId} onChange={e => setToId(e.target.value)}>
+              <option value="">Select employee...</option>
+              {employees.filter(e => e.id !== device.profile_id).map(e => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+            </select>
+          </div>
+          <div className="field"><label>Condition handed to new holder</label>
+            <select className="inp" value={newCondition} onChange={e => setNewCondition(e.target.value)}>
+              <option value="new">New</option><option value="good">Good</option>
+              <option value="fair">Fair</option><option value="poor">Poor</option>
+            </select>
+          </div>
+          <div className="field"><label>Handover notes (new baseline)</label>
+            <input className="inp" value={newNotes} onChange={e => setNewNotes(e.target.value)} placeholder="condition the new holder receives it in" />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={saving || !toId} onClick={doReassign}>
+            {saving ? <><div className="spinner" /><span>Reassigning...</span></> : 'Reassign'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Onboarding Page ─────────────────────────────────────────────────────────
 function OnboardingPage({ user, showToast }: { user: { id: string; full_name: string; role: string }; showToast: (m: string, t?: 'ok' | 'fail') => void }) {
   const [entries, setEntries] = useState<any[]>([])
@@ -1597,6 +2009,99 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
   )
 }
 
+// ── Devices Page (fleet) ────────────────────────────────────────────────────
+function DevicesPage({ user, showToast }: { user: { id: string; full_name: string; role: string }; showToast: (m: string, t?: 'ok' | 'fail') => void }) {
+  const [devices, setDevices] = useState<(EmployeeDevice & { holder?: { full_name: string } | null })[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [ownershipFilter, setOwnershipFilter] = useState('')
+
+  const load = useCallback(() => {
+    setLoading(true)
+    supabase.from('employee_devices')
+      .select('*, holder:profiles!employee_devices_profile_id_fkey(full_name)')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => { setDevices((data as any) || []); setLoading(false) })
+  }, [])
+  useEffect(() => { load() }, [load])
+
+  const filtered = devices.filter(d => {
+    if (statusFilter && d.status !== statusFilter) return false
+    if (ownershipFilter && d.ownership !== ownershipFilter) return false
+    if (search) {
+      const hay = [d.make, d.model, d.serial_number, d.imei, d.holder?.full_name].filter(Boolean).join(' ').toLowerCase()
+      return hay.includes(search.toLowerCase())
+    }
+    return true
+  })
+
+  const inService = devices.filter(d => d.ownership === 'company' && !['lost', 'retired'].includes(d.status))
+  const fleetCurrent = inService.reduce((sum, d) => sum + (depreciatedValue(d.purchase_value, d.depreciation_rate, d.date_added) || 0), 0)
+  const fleetOriginal = inService.reduce((sum, d) => sum + (d.purchase_value || 0), 0)
+
+  return (
+    <>
+      <div className="page-header">
+        <div>
+          <div className="page-title">Devices</div>
+          <div className="page-sub">{devices.length} device{devices.length === 1 ? '' : 's'} &bull; fleet value now ≈ {inr(fleetCurrent)} (of {inr(fleetOriginal)} original)</div>
+        </div>
+      </div>
+      <div className="page-body">
+        <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+          <input className="inp" style={{ width: 220, flexShrink: 0 }} placeholder="Search make, model, serial, holder..." value={search} onChange={e => setSearch(e.target.value)} />
+          <select className="inp" style={{ width: 150, flexShrink: 0 }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <option value="">All statuses</option>
+            {Object.entries(DEVICE_STATUS_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <select className="inp" style={{ width: 150, flexShrink: 0 }} value={ownershipFilter} onChange={e => setOwnershipFilter(e.target.value)}>
+            <option value="">All ownership</option>
+            <option value="company">Company</option>
+            <option value="personal">Personal</option>
+          </select>
+        </div>
+
+        {loading ? <div className="empty-state"><div className="spinner" /></div> : filtered.length === 0 ? (
+          <div className="empty-state"><div className="empty-state-title">No devices</div><div className="empty-state-sub">{devices.length === 0 ? 'Add devices from an employee\u2019s Devices tab.' : 'No devices match these filters.'}</div></div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Device</th><th>Holder</th><th>Status</th><th>Condition</th>
+                  <th style={{ textAlign: 'right' }}>Value (incl GST)</th><th style={{ textAlign: 'right' }}>Now ≈</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map(d => {
+                  const depVal = depreciatedValue(d.purchase_value, d.depreciation_rate, d.date_added)
+                  return (
+                    <tr key={d.id}>
+                      <td>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{[d.make, d.model].filter(Boolean).join(' ') || d.device_type}</div>
+                        <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>
+                          {d.device_type}{d.serial_number ? ` · SN ${d.serial_number}` : ''}{d.imei ? ` · IMEI ${d.imei}` : ''}
+                          <span style={{ marginLeft: 6, padding: '0 6px', borderRadius: 8, border: '1px solid var(--border)' }}>{d.ownership === 'company' ? 'Company' : 'Personal'}</span>
+                        </div>
+                      </td>
+                      <td style={{ fontSize: 12, color: 'var(--text2)' }}>{d.holder?.full_name || <span style={{ color: 'var(--text3)' }}>In pool</span>}</td>
+                      <td><span style={{ fontSize: 11, fontWeight: 600, color: DEVICE_STATUS_COLOR[d.status] || 'var(--text3)' }}>{DEVICE_STATUS_LABELS[d.status] || d.status}</span></td>
+                      <td style={{ fontSize: 11.5, color: 'var(--text2)', textTransform: 'capitalize' }}>{d.condition_at_handover || '—'}</td>
+                      <td style={{ textAlign: 'right', fontSize: 12, color: 'var(--text2)' }}>{d.ownership === 'company' ? inr(d.purchase_value) : '—'}</td>
+                      <td style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{d.ownership === 'company' ? inr(depVal) : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
 // ── Settings Page ───────────────────────────────────────────────────────────
 function SettingsPage({ showToast }: { showToast: (m: string, t?: 'ok' | 'fail') => void }) {
   const [settings, setSettings] = useState<Record<string, string>>({})
@@ -1700,6 +2205,7 @@ function StatusBadge({ status }: { status?: string }) {
 const PeopleIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="6" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M1 13c0-2.761 2.239-4 5-4s5 1.239 5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="12" cy="5" r="2" stroke="currentColor" strokeWidth="1.5"/><path d="M12 9c1.5 0 3 .8 3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
 const OnboardingIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M8 2L2 7v7h4v-4h4v4h4V7L8 2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>
 const DocIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="3" y="1" width="10" height="14" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M6 5h4M6 8h4M6 11h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+const DeviceIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="2.5" y="3" width="11" height="7.5" rx="1" stroke="currentColor" strokeWidth="1.5"/><path d="M1 13h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
 const SettingsIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="2.5" stroke="currentColor" strokeWidth="1.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
 const HomeIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 7l6-5 6 5v7H2V7z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M6 14v-4h4v4" stroke="currentColor" strokeWidth="1.5"/></svg>
 const ScoutIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
