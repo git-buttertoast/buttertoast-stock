@@ -1396,14 +1396,13 @@ function OnboardingPage({ user, showToast }: { user: { id: string; full_name: st
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.from('scout_onboarding').select('*, scout_onboarding_checklist(*)').in('status', ['pending', 'in_progress', 'complete']).order('created_at', { ascending: false }).then(({ data }) => {
+    supabase.from('scout_onboarding').select('*, scout_onboarding_checklist(*)').in('status', ['pending', 'in_progress']).order('created_at', { ascending: false }).then(({ data }) => {
       setEntries(data || [])
       setLoading(false)
     })
   }, [])
 
   const active = entries.filter(e => e.status !== 'complete')
-  const completed = entries.filter(e => e.status === 'complete')
 
   return (
     <>
@@ -1423,14 +1422,6 @@ function OnboardingPage({ user, showToast }: { user: { id: string; full_name: st
                 <div className="section-title" style={{ marginBottom: 12 }}>Active ({active.length})</div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 12, marginBottom: 28 }}>
                   {active.map(ob => <OnboardingCard key={ob.id} ob={ob} />)}
-                </div>
-              </>
-            )}
-            {completed.length > 0 && (
-              <>
-                <div className="section-title" style={{ marginBottom: 12 }}>Completed ({completed.length})</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 12 }}>
-                  {completed.map(ob => <OnboardingCard key={ob.id} ob={ob} />)}
                 </div>
               </>
             )}
