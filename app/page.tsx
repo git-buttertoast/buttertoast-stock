@@ -2010,12 +2010,161 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
 }
 
 // ── Devices Page (fleet) ────────────────────────────────────────────────────
+// ── Add device modal (fleet-level) ──────────────────────────────────────────
+function AddDeviceModal({ employees, onClose, onAdded, showToast }: {
+  employees: { id: string; full_name: string }[]
+  onClose: () => void
+  onAdded: () => void
+  showToast: (m: string, t?: 'ok' | 'fail') => void
+}) {
+  const today = new Date().toISOString().split('T')[0]
+  const blank = {
+    ownership: 'company', device_type: 'laptop', make: '', model: '', serial_number: '',
+    imei: '', color: '', specs: '', accessories: '', purchase_value: '', purchase_date: '',
+    date_added: today, depreciation_rate: '0.20',
+    condition_at_handover: 'good', condition_notes: '', notes: '',
+  }
+  const [form, setForm] = useState<Record<string, string>>(blank)
+  const [holder, setHolder] = useState('')
+  const [saving, setSaving] = useState(false)
+  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
+  const fld = (key: string, label: string, type = 'text', ph = '') => (
+    <div className="field"><label>{label}</label>
+      <input className="inp" type={type} value={form[key] || ''} placeholder={ph}
+        onChange={e => set(key, e.target.value)} /></div>
+  )
+  function defaultRate(type: string) { return String(DEVICE_DEPRECIATION_DEFAULTS[type] ?? 0.20) }
+
+  async function save() {
+    if (!form.make && !form.model) { showToast('Add at least a make or model.', 'fail'); return }
+    setSaving(true)
+    const holderId = holder || null
+    const status = holderId ? 'assigned' : 'unassigned'
+    const payload: Record<string, any> = {
+      profile_id: holderId,
+      ownership: form.ownership,
+      device_type: form.device_type,
+      make: form.make.trim() || null,
+      model: form.model.trim() || null,
+      serial_number: form.serial_number.trim() || null,
+      imei: form.imei.trim() || null,
+      color: form.color.trim() || null,
+      specs: form.specs.trim() || null,
+      accessories: form.accessories.trim() || null,
+      purchase_value: form.purchase_value ? parseFloat(form.purchase_value) : null,
+      purchase_date: form.purchase_date || null,
+      date_added: form.date_added || null,
+      depreciation_rate: form.depreciation_rate ? parseFloat(form.depreciation_rate) : 0.20,
+      condition_at_handover: form.condition_at_handover,
+      condition_notes: form.condition_notes.trim() || null,
+      status,
+      assigned_date: holderId ? today : null,
+      notes: form.notes.trim() || null,
+    }
+    const res = await supabase.from('employee_devices').insert(payload).select('id').single()
+    if (res.error || !res.data) { setSaving(false); showToast('Could not add device: ' + (res.error?.message || 'unknown'), 'fail'); return }
+    if (holderId) {
+      await supabase.from('device_history').insert({
+        device_id: res.data.id, profile_id: holderId, event: 'assigned',
+        detail: `${form.make} ${form.model}`.trim() + ' assigned', condition: form.condition_at_handover,
+      })
+    }
+    setSaving(false)
+    showToast('Device added.')
+    onAdded()
+    onClose()
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={e => e.target === e.currentTarget && onClose()} style={{ zIndex: 300 }}>
+      <div className="modal" style={{ maxWidth: 680 }}>
+        <div className="modal-header">
+          <div>
+            <div className="modal-title">Add device</div>
+            <div className="modal-sub">Add to the pool or assign to someone directly</div>
+          </div>
+        </div>
+        <div className="modal-body">
+          <div className="field"><label>Holder</label>
+            <select className="inp" value={holder} onChange={e => setHolder(e.target.value)}>
+              <option value="">In pool (unassigned)</option>
+              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.full_name}</option>)}
+            </select>
+          </div>
+          <div className="field-row">
+            <div className="field"><label>Ownership</label>
+              <select className="inp" value={form.ownership} onChange={e => set('ownership', e.target.value)}>
+                <option value="company">Company-provided</option>
+                <option value="personal">Personal (BYOD)</option>
+              </select>
+            </div>
+            <div className="field"><label>Type</label>
+              <select className="inp" value={form.device_type}
+                onChange={e => { const t = e.target.value; setForm(f => ({ ...f, device_type: t, depreciation_rate: defaultRate(t) })) }}>
+                {DEVICE_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="field-row">{fld('make', 'Make', 'text', 'e.g. Apple')}{fld('model', 'Model', 'text', 'e.g. MacBook Air M2')}</div>
+          <div className="field-row">{fld('serial_number', 'Serial number')}{fld('imei', 'IMEI (phones/tablets)')}</div>
+          <div className="field-row">{fld('color', 'Colour')}{fld('specs', 'Specs', 'text', 'RAM / storage / CPU')}</div>
+          {fld('accessories', 'Bundled accessories', 'text', 'charger, case, dongle (came with device)')}
+          {form.ownership === 'company' && (
+            <>
+              <div className="field-row">
+                {fld('purchase_value', 'Value incl. GST (₹)', 'number', 'e.g. 95000')}
+                <div className="field"><label>Date added to company</label>
+                  <DateInput value={form.date_added} onChange={e => set('date_added', e.target.value)} />
+                </div>
+              </div>
+              <div className="field-row">
+                <div className="field"><label>Depreciation rate / yr</label>
+                  <input className="inp" type="number" step="0.01" min="0" max="1" value={form.depreciation_rate}
+                    onChange={e => set('depreciation_rate', e.target.value)} />
+                </div>
+                <div className="field"><label>&nbsp;</label>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', padding: '9px 0' }}>
+                    {form.purchase_value && form.date_added
+                      ? `Current value ≈ ${inr(depreciatedValue(parseFloat(form.purchase_value), parseFloat(form.depreciation_rate || '0.2'), form.date_added))}`
+                      : 'Reducing balance, computed live'}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+          <div className="field"><label>Condition</label>
+            <select className="inp" value={form.condition_at_handover} onChange={e => set('condition_at_handover', e.target.value)}>
+              <option value="new">New</option><option value="good">Good</option>
+              <option value="fair">Fair</option><option value="poor">Poor</option>
+            </select>
+          </div>
+          {fld('condition_notes', 'Condition notes', 'text', 'e.g. small scratch on lid')}
+          {fld('notes', 'Admin notes')}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={saving} onClick={save}>
+            {saving ? <><div className="spinner" /><span>Adding...</span></> : 'Add device'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function DevicesPage({ user, showToast }: { user: { id: string; full_name: string; role: string }; showToast: (m: string, t?: 'ok' | 'fail') => void }) {
   const [devices, setDevices] = useState<(EmployeeDevice & { holder?: { full_name: string } | null })[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [ownershipFilter, setOwnershipFilter] = useState('')
+
+  const [showAdd, setShowAdd] = useState(false)
+  const [employees, setEmployees] = useState<{ id: string; full_name: string }[]>([])
+  useEffect(() => {
+    supabase.from('profiles').select('id, full_name').eq('is_active', true).order('full_name')
+      .then(({ data }) => setEmployees((data as any[]) || []))
+  }, [])
 
   const load = useCallback(() => {
     setLoading(true)
@@ -2047,6 +2196,7 @@ function DevicesPage({ user, showToast }: { user: { id: string; full_name: strin
           <div className="page-title">Devices</div>
           <div className="page-sub">{devices.length} device{devices.length === 1 ? '' : 's'} &bull; fleet value now ≈ {inr(fleetCurrent)} (of {inr(fleetOriginal)} original)</div>
         </div>
+        <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add device</button>
       </div>
       <div className="page-body">
         <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -2063,7 +2213,7 @@ function DevicesPage({ user, showToast }: { user: { id: string; full_name: strin
         </div>
 
         {loading ? <div className="empty-state"><div className="spinner" /></div> : filtered.length === 0 ? (
-          <div className="empty-state"><div className="empty-state-title">No devices</div><div className="empty-state-sub">{devices.length === 0 ? 'Add devices from an employee\u2019s Devices tab.' : 'No devices match these filters.'}</div></div>
+          <div className="empty-state"><div className="empty-state-title">No devices</div><div className="empty-state-sub">{devices.length === 0 ? 'Add a device with the button above, or from an employee\u2019s Devices tab.' : 'No devices match these filters.'}</div></div>
         ) : (
           <div className="table-wrap">
             <table>
@@ -2098,6 +2248,7 @@ function DevicesPage({ user, showToast }: { user: { id: string; full_name: strin
           </div>
         )}
       </div>
+      {showAdd && <AddDeviceModal employees={employees} onClose={() => setShowAdd(false)} onAdded={load} showToast={showToast} />}
     </>
   )
 }
