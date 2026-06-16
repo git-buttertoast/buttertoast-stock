@@ -142,239 +142,263 @@ function acceptBlock(name: string) {
   </div>`
 }
 
-// ── OFFER LETTER ─────────────────────────────────────────────────────────────
+// ── NEW GOOGLE-GRADE EMPLOYMENT LETTERS ──────────────────────────────────────
+// Google's legal spine, Butter Toast's soul.
+// Warm framing at open/close; crisp, serious legal language in the operative clauses.
+// All clauses to be lawyer-vetted. Clauses with uncertain Indian enforceability are
+// flagged inline with a subtle reviewer note the lawyer can find and the client can keep or cut.
+
+// ── OFFER LETTER (slim, warm — like Google's 1-page cover) ────────────────────
 function offerLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   const ref = generateRef('offer_letter', p.employee_name)
   const dateStr = fmtDate(p.effective_date)
-  const joiningStr = fmtDate(p.joining_date)
-  const dutiesList = p.duties
-    ? p.duties.split('\n').filter((d: string) => d.trim()).map((d: string) => `<li>${d.replace(/^[-*]\s*/,'')}</li>`).join('')
-    : ''
+  const monthly = toMonthly(num(p.annual_ctc))
   const content = `
 <div class="doc-title">Offer of Employment</div>
+
 <p>Dear <strong>${p.employee_name}</strong>,</p>
-<p>Congratulations! We are delighted to extend to you an offer of employment with Butter Toast, a creative division of HATCHX INDIA, based in Ahmedabad, Gujarat. We were impressed with your background and are confident that you will make a significant contribution to our growing team.</p>
-<p>This letter outlines the terms and conditions of your employment with us.</p>
-<hr class="divider"/>
-<h3>1. Position and Reporting</h3>
-<p>You will be appointed to the position of <strong>${p.role_title}</strong>${p.department ? ` in the ${p.department} department` : ''}. In this role, you will report directly to <strong>${p.reports_to_name || '[Reporting Manager]'}</strong>, or to any other person as designated by management in the future.</p>
-<p>Your expected start date will be <strong>${joiningStr}</strong>.</p>
-${dutiesList ? `<p>Your duties and responsibilities will include, but are not limited to:</p><ul>${dutiesList}</ul>` : ''}
-<hr class="divider"/>
-<h3>2. Compensation and Benefits</h3>
-<p><strong>Base Compensation</strong></p>
-<p>You will receive a gross annual CTC of <strong>INR ${fmtMoney(p.annual_probation_ctc)}</strong> (approximately <strong>INR ${fmtMoney(p.probation_ctc)}</strong> per month), payable on or before the 5th of each month, subject to applicable taxes and statutory deductions.${p.annual_confirmed_ctc ? ` To be revised post confirmation to an annual CTC of INR ${fmtMoney(p.annual_confirmed_ctc)} (approximately INR ${fmtMoney(p.confirmed_ctc)} per month).` : ''}</p>
-<p><strong>Allowances &amp; Benefits</strong></p>
-<p>Depending on your role and tenure, you may be entitled to the following:</p>
-<ul>
-  <li>Paid annual leave, sick leave, and public holidays as per the company's HR policy.</li>
-  <li>Reimbursement of approved business expenses.</li>
-  <li>Access to company-provided tools, systems, and subscriptions required for your work.</li>
-  <li>Any future benefits that the company rolls out to all its employees.</li>
-</ul>
-<p><strong>Referral Bonus</strong></p>
-<p>On a successful referral (client being onboarded), a one-time bonus of 10% of the revenue generated in the first three months will be processed to you on successful completion of tenure and payment of invoices by the client to the company, irrespective of the department or the work driven.</p>
-<hr class="divider"/>
-<h3>3. Probation and Confirmation</h3>
-<p>You will be on a probationary period till <strong>${fmtDate(p.probation_end_date)}</strong>. During this period, your performance, conduct, and alignment with company values will be evaluated. Upon satisfactory completion, your employment will be confirmed in writing.</p>
-<hr class="divider"/>
-<h3>4. Working Hours and Location</h3>
-<ul>
-  <li>Work Days: Monday to Friday.</li>
-  <li>Working Hours: 10:30 AM - 7:00 PM, occasionally may overshoot depending on work requirements. If overtime extends beyond 4 hours, an employee is entitled to a day of Comp. Off or Compensatory Off of one day.</li>
-  <li>Location: Thaltej, Ahmedabad.</li>
-</ul>
-<hr class="divider"/>
-<h3>5. Confidentiality and Intellectual Property</h3>
-<p>All work, concepts, strategies, and creative output produced during your employment shall be the exclusive intellectual property of HATCHX INDIA / Butter Toast.</p>
-<p>You may not disclose, reproduce, or use any proprietary or client information for personal gain or external purposes without prior written consent.</p>
-<hr class="divider"/>
-<h3>6. Code of Conduct and Company Policies</h3>
-<p>As part of the team, you are expected to:</p>
-<ul>
-  <li>Maintain professionalism, respect, and integrity in all internal and client communications.</li>
-  <li>Adhere to workplace policies, attendance norms, and performance expectations.</li>
-  <li>Uphold the creative and ethical standards that Butter Toast is known for.</li>
-</ul>
-<p>Violation of company policies may result in disciplinary action, including termination.</p>
-<hr class="divider"/>
-<h3>7. Termination of Employment</h3>
-<p>Either party may terminate this employment by providing 2 month written notice or salary in lieu thereof.</p>
-<p>However, in cases of misconduct, breach of confidentiality, or gross negligence, HATCHX INDIA reserves the right to terminate employment immediately without notice or compensation.</p>
-<hr class="divider"/>
-<h3>8. Background Verification</h3>
-<p>This offer is contingent upon successful completion of background verification checks and submission of valid identification and address proof as required by HR.</p>
-<hr class="divider"/>
-<h3>9. Entire Agreement</h3>
-<p>This offer letter, along with your signed acceptance and accompanying agreements (such as NDA or IP agreement), constitutes the entire understanding between you and HATCHX INDIA (Butter Toast) and supersedes any prior verbal or written communication regarding employment terms.</p>
-<hr class="divider"/>
-<h3>10. Acceptance of Offer</h3>
-<p>Please sign and return a scanned copy of this letter to confirm your acceptance. Your signature indicates your understanding and agreement to the terms and conditions mentioned herein.</p>
-<p>We are excited to welcome you to the Butter Toast family -- a space where creativity meets strategy, and ideas come alive.</p>
-<p>We look forward to seeing the impact you'll create with us.</p>
-<p style="margin-top:14px;">Warm regards,<br/>For HATCHX INDIA (Butter Toast)</p>
-${sigBoth()}
-${acceptBlock(p.employee_name)}`
-  return shell(content, s, ref, dateStr)
-}
-// ── INTERNSHIP OFFER LETTER ───────────────────────────────────────────────────
-function internshipOffer(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('internship_offer', p.employee_name)
-  const dateStr = fmtDate(p.effective_date)
-  const joiningStr = fmtDate(p.joining_date)
-  const endStr = fmtDate(p.internship_end_date)
-  const first = p.employee_name.split(' ')[0]
-  const content = `
-<p>Dear <strong>${p.employee_name}</strong>,</p>
-<p class="fun">Good news, ${first} &mdash; you're on the menu. As an intern, consider this your trial tasting.</p>
-<p>We're excited to have you join Butter Toast as <strong>${p.role_title}</strong>.</p>
-<p>Here are the basics:</p>
+
+<p>It is our genuine pleasure to offer you a place at <strong>Butter Toast</strong>, a HATCHX INDIA Brand. We were impressed by you, we think you are going to do great things here, and we would love for you to join us.</p>
+
+<p>Here is the headline:</p>
+
 <table class="terms">
-  <tr><td>Role</td><td>${p.role_title}</td></tr>
-  <tr><td>Start Date</td><td>${joiningStr}</td></tr>
-  ${endStr !== '--' ? `<tr><td>Duration</td><td>Till ${endStr}</td></tr>` : `<tr><td>Duration</td><td>${p.internship_months || ''} months</td></tr>`}
-  <tr><td>Location</td><td>Ahmedabad</td></tr>
-  ${p.reports_to_name ? `<tr><td>Reporting To</td><td>${p.reports_to_name}</td></tr>` : ''}
-  <tr><td>Monthly Stipend</td><td>INR ${fmtMoney(p.stipend)} / Month</td></tr>
+  <tr><td>Position</td><td>${p.role_title}</td></tr>
+  ${p.department ? `<tr><td>Department</td><td>${p.department}</td></tr>` : ''}
+  ${p.reports_to_name ? `<tr><td>Reporting to</td><td>${p.reports_to_name}</td></tr>` : ''}
+  <tr><td>Proposed start date</td><td>${fmtDate(p.joining_date)}</td></tr>
+  <tr><td>Annual CTC</td><td>&#8377; ${fmtMoney(num(p.annual_ctc))} per annum${monthly ? ` (approximately &#8377; ${fmtMoney(monthly)} per month)` : ''}</td></tr>
+  <tr><td>Place of work</td><td>${s.company_address}</td></tr>
 </table>
-${p.notes ? `<p>${p.notes}</p>` : ''}
-<p>Over the next few days, we'll share everything you need to get started &mdash; tools, processes, and what your first few weeks will look like.</p>
-<p>Until then, take this as your official confirmation: you're part of the kitchen now.</p>
-<p>Let's cook some good stuff.</p>
-<p style="margin-top:14px;">Best,<br/><strong>Team PeopleOps, Butter Toast</strong></p>
+
+<p>This is a warm summary, not the rulebook. The full and binding terms of your employment &mdash; your duties, compensation, confidentiality and intellectual-property obligations, notice period, and everything else &mdash; are set out in your <strong>Appointment Letter (Contract of Employment)</strong>, which accompanies this offer. Please read it carefully; by signing it you accept those terms in full.</p>
+
+<p>This offer is conditional on the satisfactory completion of our standard onboarding checks (background and reference verification, confirmation of your right to work in India, and the qualifications and information you have shared with us). We may withdraw this offer if any of these are not met, or if any information provided to us proves to be materially incorrect.</p>
+
+<p>To accept, please sign and return both this letter and the accompanying Appointment Letter. We would be grateful to receive your acceptance within <strong>seven (7) days</strong> of the date above.</p>
+
+<p class="fun">Welcome to the kitchen. We cannot wait to see what we build together.</p>
+
 ${sigBoth()}
-${acceptBlock(p.employee_name)}`
+
+${acceptBlock(p.employee_name)}
+`
   return shell(content, s, ref, dateStr)
 }
 
-// ── APPOINTMENT LETTER ────────────────────────────────────────────────────────
+// ── APPOINTMENT LETTER (the anchor — full Google-style Contract of Employment) ─
 function appointmentLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   const ref = generateRef('appointment_letter', p.employee_name)
   const dateStr = fmtDate(p.effective_date)
-  const joiningStr = fmtDate(p.joining_date)
-  const probEndStr = fmtDate(p.probation_end_date)
-  const dutiesList = p.duties
-    ? p.duties.split('\n').filter((d: string) => d.trim()).map((d: string) => `<li>${d.replace(/^[-*]\s*/,'')}</li>`).join('')
-    : '<li>[Duties to be communicated by your reporting manager]</li>'
+  const annual = num(p.annual_ctc) ?? num(p.annual_confirmed_ctc) ?? num(p.annual_probation_ctc)
+  const monthly = toMonthly(annual)
   const content = `
-<div class="doc-title">Appointment Letter</div>
-<p>Dear <strong>${p.employee_name}</strong>,</p>
-<p>Congratulations! We are delighted to confirm your appointment with Butter Toast, a creative division of HATCHX INDIA, based in Ahmedabad, Gujarat. We were impressed with your background and are confident that you will make a significant contribution to our growing team.</p>
-<p>This letter outlines the terms and conditions of your employment with us.</p>
-<hr class="divider"/>
-<h3>1. Position and Reporting</h3>
-<p>You will be appointed to the position of <strong>${p.role_title}</strong>${p.department ? ` in the ${p.department} department` : ''}. In this role, you will report directly to <strong>${p.reports_to_name || '[Reporting Manager]'}</strong>, or to any other person as designated by management in the future.</p>
-<p>Your date of joining is <strong>${joiningStr}</strong>.</p>
-<p>Your duties and responsibilities will include, but are not limited to:</p>
-<ul>${dutiesList}</ul>
-<hr class="divider"/>
-<h3>2. Compensation and Benefits</h3>
-<p><strong>Base Compensation</strong></p>
-<p>You will receive a gross annual CTC of <strong>INR ${fmtMoney(p.annual_ctc)}</strong> (approximately <strong>INR ${fmtMoney(p.monthly_ctc)}</strong> per month), payable on or before the 5th of each month, subject to applicable taxes and statutory deductions.${p.annual_confirmed_ctc ? ` To be revised post confirmation to an annual CTC of INR ${fmtMoney(p.annual_confirmed_ctc)} (approximately INR ${fmtMoney(p.confirmed_ctc)} per month).` : ''}</p>
-<p><strong>Allowances &amp; Benefits</strong></p>
-<p>Depending on your role and tenure, you may be entitled to the following:</p>
-<ul>
-  <li>Paid annual leave, sick leave, and public holidays as per the company's HR policy.</li>
-  <li>Reimbursement of approved business expenses.</li>
-  <li>Access to company-provided tools, systems, and subscriptions required for your work.</li>
-  <li>Any future benefits that the company rolls out to all its employees.</li>
-</ul>
-<p><strong>Referral Bonus</strong></p>
-<p>On a successful referral (client being onboarded), a one-time bonus of 10% of the revenue generated in the first three months will be processed to you on successful completion of tenure and payment of invoices by the client to the company, irrespective of the department or the work driven.</p>
-<hr class="divider"/>
-<h3>3. Probation and Confirmation</h3>
-<p>You will be on a probationary period till <strong>${probEndStr}</strong>. During this period, your performance, conduct, and alignment with company values will be evaluated. Upon satisfactory completion, your employment will be confirmed in writing.</p>
-<hr class="divider"/>
-<h3>4. Working Hours and Location</h3>
-<ul>
-  <li>Work Days: Monday to Friday.</li>
-  <li>Working Hours: 10:30 AM - 7:00 PM, occasionally may overshoot depending on work requirements. If overtime extends beyond 4 hours, an employee is entitled to a day of Comp. Off or Compensatory Off of one day.</li>
-  <li>Location: Thaltej, Ahmedabad.</li>
-</ul>
-<hr class="divider"/>
-<h3>5. Confidentiality and Intellectual Property</h3>
-<p>All work, concepts, strategies, and creative output produced during your employment shall be the exclusive intellectual property of HATCHX INDIA / Butter Toast.</p>
-<p>You may not disclose, reproduce, or use any proprietary or client information for personal gain or external purposes without prior written consent.</p>
-<hr class="divider"/>
-<h3>6. Code of Conduct and Company Policies</h3>
-<p>As part of the team, you are expected to:</p>
-<ul>
-  <li>Maintain professionalism, respect, and integrity in all internal and client communications.</li>
-  <li>Adhere to workplace policies, attendance norms, and performance expectations.</li>
-  <li>Uphold the creative and ethical standards that Butter Toast is known for.</li>
-</ul>
-<p>Violation of company policies may result in disciplinary action, including termination.</p>
-<hr class="divider"/>
-<h3>7. Termination of Employment</h3>
-<p>Either party may terminate this employment by providing 2 month written notice or salary in lieu thereof.</p>
-<p>However, in cases of misconduct, breach of confidentiality, or gross negligence, HATCHX INDIA reserves the right to terminate employment immediately without notice or compensation.</p>
-<hr class="divider"/>
-<h3>8. Background Verification</h3>
-<p>This appointment is contingent upon successful completion of background verification checks and submission of valid identification and address proof as required by HR.</p>
-<hr class="divider"/>
-<h3>9. Entire Agreement</h3>
-<p>This letter, along with your signed acceptance and accompanying agreements (such as NDA or IP agreement), constitutes the entire understanding between you and HATCHX INDIA (Butter Toast) and supersedes any prior verbal or written communication regarding employment terms.</p>
-<hr class="divider"/>
-<h3>10. Acceptance</h3>
-<p>Please sign and return a scanned copy of this letter to confirm your acceptance. Your signature indicates your understanding and agreement to all terms and conditions herein.</p>
-<p>We are excited to welcome you to the Butter Toast family -- a space where creativity meets strategy, and ideas come alive.</p>
-<p>We look forward to seeing the impact you will create with us.</p>
-<p style="margin-top:14px;">Warm regards,<br/>For HATCHX INDIA (Butter Toast)</p>
+<p style="margin-top:18px;">Dear <strong>${p.employee_name}</strong>,</p>
+
+<p><strong style="font-size:14px;">Welcome to Butter Toast &mdash; we are so glad you said yes.</strong></p>
+
+<p>This is the part where it becomes real. Below is everything you need to accept your appointment and step into your first few days with us. The formal Contract of Employment follows on the next page; this page is just us, telling you we are happy you are here.</p>
+
+<h3>Accepting your appointment</h3>
+<p>The full and binding terms of your employment are set out in the Contract of Employment that follows. Please read it carefully, then sign and return it (along with your offer letter) to confirm your acceptance. We would love to receive your signed acceptance within <strong>seven (7) days</strong>.</p>
+
+<h3>What&rsquo;s to come</h3>
+<p>Once you have accepted, our People team will reach out to walk you through onboarding &mdash; paperwork, your workspace and devices, the people you will work with, and how we do things around here. Your first day is ${fmtDate(p.joining_date)}. Come curious; we will take care of the rest.</p>
+
+<p>If anything at all is unclear before you sign, just ask us. We would rather you start fully comfortable than quietly unsure.</p>
+
+<p class="fun">We cannot wait to see what we make together. Welcome to the kitchen.</p>
+
+<p style="margin-top:18px;">Warmly,<br/>Team Butter Toast</p>
+
+<div style="page-break-after:always;"></div>
+
+<div style="height:14mm;"></div>
+<div class="doc-title">Appointment Letter &mdash; Contract of Employment</div>
+
+<p>This Contract of Employment (the &ldquo;Agreement&rdquo;) is made between <strong>HATCHX INDIA</strong>, a proprietorship operating the brand <strong>Butter Toast</strong>, having its office at ${s.company_address}, GSTIN ${s.gst} (the &ldquo;Company&rdquo;), and:</p>
+
+<table class="terms">
+  <tr><td>Name</td><td>${p.employee_name}</td></tr>
+  <tr><td>Address</td><td>[Employee Address]</td></tr>
+  <tr><td>Position</td><td>${p.role_title}</td></tr>
+  ${p.department ? `<tr><td>Department</td><td>${p.department}</td></tr>` : ''}
+  ${p.reports_to_name ? `<tr><td>Reporting to</td><td>${p.reports_to_name}</td></tr>` : ''}
+  <tr><td>Date of joining</td><td>${fmtDate(p.joining_date)}</td></tr>
+</table>
+
+<p>(together, the &ldquo;Parties,&rdquo; and you as the &ldquo;Employee&rdquo;).</p>
+
+<h3>1. Conditional Offer and Pre-Employment Checks</h3>
+<p>Your appointment is conditional upon: (a) verification of your background, references, and previous employment; (b) confirmation of your legal right to work in India; and (c) the genuineness of the qualifications, certificates, and information you have provided. If any condition is not satisfied, or if any information you have given is found to be false or materially misleading, the Company may withdraw this appointment or terminate your employment without notice, at any stage.</p>
+
+<h3>2. Commencement and Probation</h3>
+<p>Your employment begins on ${fmtDate(p.joining_date)}. You will serve an initial probation period${p.probation_end_date ? ` ending on ${fmtDate(p.probation_end_date)}` : ' as per Company policy'}. During probation, either Party may end this Agreement with shorter notice as set out in Clause 11. On satisfactory completion of probation, your employment will be confirmed in writing. The Company may, at its discretion, extend the probation period.</p>
+
+<h3>3. Position, Duties, and Flexibility</h3>
+<p>You are appointed as <strong>${p.role_title}</strong>${p.reports_to_name ? `, reporting to ${p.reports_to_name}` : ''}. You agree to perform the duties of your role diligently and to the best of your ability, and to follow the lawful and reasonable instructions of the Company. The Company may, as its needs evolve, reasonably vary your duties, title, reporting line, team, or place of work, without this constituting a new contract, provided your CTC is not reduced as a result.</p>
+
+<h3>4. Administrative Leave</h3>
+<p>The Company may, where it considers it necessary (for example, during an investigation into alleged misconduct), require you to remain away from work on full pay for a reasonable period. This is a precaution, not a penalty, and does not by itself imply any finding against you.</p>
+
+<h3>5. Compensation</h3>
+<p>Your total cost to company (CTC) is <strong>&#8377; ${fmtMoney(annual)} per annum</strong>${monthly ? ` (approximately &#8377; ${fmtMoney(monthly)} per month)` : ''}, payable monthly, subject to deduction of tax at source and any other statutory deductions. Your CTC is inclusive of all components of remuneration. The Company may, in future, restructure the components of your CTC (for example, into a detailed salary breakup) and introduce statutory benefits such as Provident Fund as and when applicable, without reducing your total CTC. Revisions to your compensation, if any, are at the Company's discretion and will be communicated in writing.</p>
+
+<h3>6. Working Hours and Place of Work</h3>
+<p>Your standard working day is <strong>eight (8) hours and thirty (30) minutes, inclusive of breaks</strong>, on the Company's working days. Your normal place of work is ${s.company_address}, though your role may from time to time require work at other locations or remotely. Creative work does not always fit neatly into a clock, and we trust our people; by signing below you acknowledge and accept these standard hours as the basis of your engagement.</p>
+
+<h3>7. Leave</h3>
+<p>You are entitled to annual leave, sick leave, and public holidays in accordance with the Company's prevailing leave policy, as amended from time to time. Leave must be applied for and approved in advance, except in genuine emergencies.</p>
+
+<h3>8. Conduct and Standards</h3>
+<p>You agree to conduct yourself professionally, to treat colleagues, clients, and partners with respect, and to comply with all Company policies, including those on workplace conduct, anti-harassment, health and safety, and information security, as they may be updated from time to time.</p>
+
+<h3>9. Misconduct</h3>
+<p>The following are examples of misconduct that may lead to disciplinary action, up to and including termination without notice or pay in lieu of notice: habitual absence or lateness without leave; insubordination or refusal to carry out lawful instructions; theft, fraud, or dishonesty; wilful damage to or misuse of Company or client property; harassment, discrimination, or violence; being under the influence of alcohol or drugs at work; breach of confidentiality or of the intellectual-property obligations in this Agreement; bringing the Company or its clients into disrepute; and any serious or repeated breach of Company policy. This list is illustrative, not exhaustive.</p>
+
+<h3>10. Conflict of Interest, Outside Work, and Prior Obligations</h3>
+<p>You confirm that you are free to take up this employment and are not bound by any agreement (such as a non-compete or confidentiality obligation to a former employer) that would prevent you from performing your duties here, and that you will not use or disclose any third party's confidential information in the course of your work.</p>
+<p>Butter Toast is a creative workplace, and we do not seek to own your every waking hour. You are free to take on outside creative work, <strong>provided that</strong> it does not: compete with the Company's business; involve the Company's clients or prospective clients; use the Company's time, equipment, resources, or confidential information; or create a conflict of interest with your duties to the Company. What we do not permit is moonlighting &mdash; that is, parallel or undisclosed employment or engagement that competes with us, draws on our resources, or interferes with your work here. If you are ever unsure whether an outside engagement is acceptable, ask us first; we will be reasonable.</p>
+
+<h3>11. Termination and Notice</h3>
+<p>After confirmation, either Party may terminate this Agreement by giving <strong>two (2) months' written notice</strong>, or payment of basic salary in lieu of the notice period. The Company may, at its discretion, reduce or waive part of the notice period. Where the Company shortens your notice period, you will, in any event, be entitled to a minimum of <strong>fifteen (15) days'</strong> compensation (calculated on basic salary) as a guaranteed floor. During probation, the notice period is as stated in your offer or as per Company policy, and is shorter. Nothing in this clause limits the Company's right to terminate immediately for misconduct under Clause 9.</p>
+<p>On termination for any reason, you will promptly return all Company property, devices, documents, and materials, and will hand over your work in an orderly manner.</p>
+
+<h3>12. Non-Solicitation</h3>
+<p>For <strong>six (6) months</strong> after your employment ends, you will not solicit or attempt to entice away any employee, contractor, or consultant of the Company with whom you worked. For <strong>one (1) year</strong> after your employment ends, you will not solicit, for a competing purpose, any client of the Company with whom you had material dealings in your last twelve months of employment. <span class="fun">[For legal review: the enforceability of post-employment restraints in India is governed by Section 27 of the Indian Contract Act, 1872; counsel to confirm the scope here is reasonable and enforceable, and adjust if required.]</span></p>
+
+<h3>13. Confidential Information and Invention Assignment</h3>
+<p>This clause is the Company's core protection. It functions as a non-disclosure and invention-assignment agreement, and is intended to be read and enforced as such.</p>
+
+<p><strong>13.1 Definition of Confidential Information.</strong> &ldquo;Confidential Information&rdquo; means any non-public information of the Company or of its clients, partners, or suppliers that you access, receive, or create in connection with your employment, in any form (written, oral, electronic, visual, or otherwise), whether or not marked as confidential. It includes, without limitation: business, marketing, and creative strategies; unreleased, draft, or in-progress creative work; client lists, client briefs, and client data; pricing, quotations, margins, and financial information; vendor and supplier terms; methods, processes, techniques, and know-how; source files, designs, and code; passwords and credentials; personnel information; and any trade secrets.</p>
+
+<p><strong>13.2 Exclusions.</strong> Confidential Information does not include information that: (a) is or becomes public through no fault or breach of yours; (b) you can show you already lawfully knew, free of any obligation of confidence, before the Company disclosed it; (c) is lawfully received by you from a third party who is free to disclose it; or (d) you are legally compelled to disclose, provided that you give the Company prompt written notice (where lawful) and reasonable assistance so it may seek protective measures.</p>
+
+<p><strong>13.3 Non-Disclosure and Non-Use.</strong> During your employment and at all times afterwards, you will: (a) keep all Confidential Information strictly confidential; (b) use it solely for the proper performance of your duties for the Company, and for no other purpose; (c) not disclose it to any person inside or outside the Company except those who need it for the Company's business and are themselves bound to keep it confidential; and (d) take reasonable care to protect it from unauthorised access, copying, or loss. These obligations survive the end of your employment for as long as the information remains confidential.</p>
+
+<p><strong>13.4 Ownership and Assignment of Work Product.</strong> All work product, designs, creative output, artwork, copy, code, writing, concepts, inventions, improvements, and other materials that you create, conceive, develop, or contribute to (whether alone or with others) in the course of your employment, or using the Company's time, equipment, resources, or Confidential Information (together, &ldquo;Work Product&rdquo;), belong exclusively to the Company. To the fullest extent permitted by law, you hereby irrevocably assign to the Company all present and future intellectual-property rights in the Work Product worldwide &mdash; including copyright, design rights, database rights, trademarks, and rights in any inventions &mdash; and, where permitted by law, you waive any moral rights in the Work Product. Insofar as any such rights do not vest in the Company automatically, you hold them on trust for the Company until assigned.</p>
+
+<p><strong>13.5 Disclosure and Further Assurance.</strong> You will promptly and fully disclose to the Company any Work Product (including any invention or original work) created in connection with your employment. At the Company's request and cost, both during and after your employment, you will sign any documents and do any acts reasonably necessary to give the Company full ownership of, and to register, perfect, evidence, or defend, its rights in the Work Product. You irrevocably appoint the Company as your attorney to execute such documents on your behalf if you fail to do so within a reasonable time of being asked.</p>
+
+<p><strong>13.6 Return of Materials.</strong> On the end of your employment, or earlier on request, you will promptly return to the Company (and, where directed, securely delete) all documents, devices, files, copies, and materials containing or embodying any Confidential Information or Work Product, and will retain no copies in any form.</p>
+
+<p><strong>13.7 Remedies.</strong> You acknowledge that any breach of this clause may cause the Company harm that money alone cannot adequately remedy, and that the Company is therefore entitled to seek injunctive or other equitable relief, in addition to any other remedies available to it at law.</p>
+
+<h3>14. Salary Deduction and Recovery</h3>
+<p>You authorise the Company to deduct from your salary or final settlement any amounts you owe the Company, including for loss of or damage to Company property caused by your negligence, advances, or over-payments, subject to and in accordance with applicable law (including the Payment of Wages Act, 1936). The Company will give you notice and an opportunity to explain before recovering disputed amounts.</p>
+
+<h3>15. Information Technology and Communications</h3>
+<p>Company devices, email, networks, and systems are provided for work. You will use them responsibly and in line with Company policy. You should have no expectation of privacy in your use of Company systems, which the Company may monitor and access for legitimate business, security, and legal reasons, to the extent permitted by law.</p>
+
+<h3>16. Data Privacy</h3>
+<p>The Company will collect and process your personal data (such as your contact, identity, payroll, and performance information) for purposes connected with your employment, in accordance with applicable law. By signing, you consent to such processing. The Company will take reasonable steps to keep your data secure and will retain it only as long as necessary.</p>
+
+<h3>17. General</h3>
+<p><strong>Entire agreement.</strong> This Agreement, together with your offer letter and the Company's policies, is the entire agreement between the Parties on your employment, and supersedes any prior discussions or representations.</p>
+<p><strong>Severability.</strong> If any clause is found to be invalid or unenforceable, the rest of the Agreement remains in full force, and the offending clause will be read down to the minimum extent necessary to make it valid.</p>
+<p><strong>Waiver.</strong> A failure by either Party to enforce any term is not a waiver of that term or of any other.</p>
+<p><strong>Notices.</strong> Notices under this Agreement must be in writing and sent to the Company at its registered office and to you at your address or email on record.</p>
+<p><strong>Governing law and jurisdiction.</strong> This Agreement is governed by the laws of India, and the courts at Ahmedabad, Gujarat, have exclusive jurisdiction over any dispute arising from it.</p>
+
+<p>We are genuinely glad you have chosen to build your work here. Sign below to confirm that you have read, understood, and accepted these terms &mdash; and then let us get to the good part.</p>
+
 ${sigBoth()}
-${acceptBlock(p.employee_name)}`
+
+${acceptBlock(p.employee_name)}
+`
   return shell(content, s, ref, dateStr)
 }
-// ── INTERNSHIP APPOINTMENT ────────────────────────────────────────────────────
+
+// ── INTERNSHIP OFFER (slim, intern-appropriate) ──────────────────────────────
+function internshipOffer(p: Record<string,any>, s: typeof LH_DEFAULTS) {
+  const ref = generateRef('internship_offer', p.employee_name)
+  const dateStr = fmtDate(p.effective_date)
+  const content = `
+<div class="doc-title">Internship Offer</div>
+
+<p>Dear <strong>${p.employee_name}</strong>,</p>
+
+<p>Good news &mdash; you're on the menu. We are delighted to offer you an internship at <strong>Butter Toast</strong>, a HATCHX INDIA Brand. Consider this your trial tasting: a chance to learn, to make real work, and to find out what a creative studio actually feels like from the inside.</p>
+
+<table class="terms">
+  <tr><td>Role</td><td>${p.role_title}</td></tr>
+  ${p.department ? `<tr><td>Team</td><td>${p.department}</td></tr>` : ''}
+  ${p.reports_to_name ? `<tr><td>Reporting to</td><td>${p.reports_to_name}</td></tr>` : ''}
+  <tr><td>Start date</td><td>${fmtDate(p.joining_date)}</td></tr>
+  ${p.internship_end_date ? `<tr><td>End date</td><td>${fmtDate(p.internship_end_date)}</td></tr>` : ''}
+  ${p.internship_months ? `<tr><td>Duration</td><td>${p.internship_months} month(s)</td></tr>` : ''}
+  <tr><td>Monthly stipend</td><td>${num(p.stipend) ? `&#8377; ${fmtMoney(num(p.stipend))} per month` : 'As discussed'}</td></tr>
+  <tr><td>Place of work</td><td>${s.company_address}</td></tr>
+</table>
+
+<p>This is the friendly summary. The full terms of your internship &mdash; including confidentiality, ownership of the work you create, conduct, and how either side may end the internship &mdash; are set out in your <strong>Internship Appointment Letter</strong>, which accompanies this offer. Please read it and sign it along with this letter.</p>
+
+<p>This offer is subject to the satisfactory verification of the information you have shared with us, and your right to work in India.</p>
+
+<p class="fun">You're part of the kitchen now. Let's cook some good stuff together.</p>
+
+<p>To accept, please sign and return this letter and the accompanying Internship Appointment Letter.</p>
+
+${sigBoth()}
+
+${acceptBlock(p.employee_name)}
+`
+  return shell(content, s, ref, dateStr)
+}
+
+// ── INTERNSHIP APPOINTMENT (right-sized contract for interns) ─────────────────
 function internshipAppointment(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   const ref = generateRef('internship_appointment', p.employee_name)
   const dateStr = fmtDate(p.effective_date)
-  const joiningStr = fmtDate(p.joining_date)
-  const endStr = fmtDate(p.internship_end_date)
-  const dutiesList = p.duties
-    ? p.duties.split('\n').filter((d: string) => d.trim()).map((d: string) => `<li>${d.replace(/^[-•*]\s*/,'')}</li>`).join('')
-    : '<li>[Duties to be communicated by your reporting manager]</li>'
   const content = `
-<p>Dear <strong>${p.employee_name}</strong>,</p>
-<p class="fun">Welcome to the kitchen. Here's what your trial run looks like.</p>
-<p>We are pleased to confirm your internship with Butter Toast, a creative division of HATCHX INDIA.</p>
-<hr class="divider"/>
-<h3>1. Position and Reporting</h3>
-<p>You will be working as <strong>${p.role_title}</strong>${p.department ? ` in the ${p.department} department` : ''}, reporting to <strong>${p.reports_to_name || '[Reporting Manager]'}</strong>.</p>
-<p>Your internship commences on <strong>${joiningStr}</strong>${endStr !== '--' ? ` and is scheduled to conclude on <strong>${endStr}</strong>` : ''}.</p>
-<p>Your responsibilities will include, but are not limited to:</p>
-<ul>${dutiesList}</ul>
-<hr class="divider"/>
+<div class="doc-title">Internship Appointment Letter</div>
+
+<p>This Internship Agreement (the &ldquo;Agreement&rdquo;) is made between <strong>HATCHX INDIA</strong>, a proprietorship operating the brand <strong>Butter Toast</strong>, having its office at ${s.company_address}, GSTIN ${s.gst} (the &ldquo;Company&rdquo;), and <strong>${p.employee_name}</strong> (the &ldquo;Intern&rdquo;).</p>
+
+<p>Welcome to the kitchen. Here is what your trial run looks like &mdash; written plainly, so we both know where we stand.</p>
+
+<table class="terms">
+  <tr><td>Role</td><td>${p.role_title}</td></tr>
+  ${p.department ? `<tr><td>Team</td><td>${p.department}</td></tr>` : ''}
+  ${p.reports_to_name ? `<tr><td>Reporting to</td><td>${p.reports_to_name}</td></tr>` : ''}
+  <tr><td>Start date</td><td>${fmtDate(p.joining_date)}</td></tr>
+  ${p.internship_end_date ? `<tr><td>End date</td><td>${fmtDate(p.internship_end_date)}</td></tr>` : ''}
+  <tr><td>Monthly stipend</td><td>${num(p.stipend) ? `&#8377; ${fmtMoney(num(p.stipend))} per month` : 'As discussed'}</td></tr>
+</table>
+
+<h3>1. Nature and Term of Internship</h3>
+<p>This is a fixed-term internship for learning and training purposes. It begins on ${fmtDate(p.joining_date)}${p.internship_end_date ? ` and ends on ${fmtDate(p.internship_end_date)}` : ''}, unless ended earlier under Clause 6. An internship is not permanent employment and does not, by itself, entitle you to an offer of employment at the end of the term.</p>
+
 <h3>2. Stipend</h3>
-<p>You will receive a monthly stipend of <strong>INR ${fmtMoney(p.stipend)}</strong>, payable on or before the 5th of each month, subject to applicable deductions.</p>
-<hr class="divider"/>
-<h3>3. Working Hours and Location</h3>
-<ul>
-  <li>Work Days: Monday to Friday.</li>
-  <li>Working Hours: 10:30 AM &ndash; 7:00 PM.</li>
-  <li>Location: Thaltej, Ahmedabad.</li>
-</ul>
-<hr class="divider"/>
-<h3>4. Confidentiality and Intellectual Property</h3>
-<p>All work produced during your internship shall be the exclusive intellectual property of HATCHX INDIA / Butter Toast. You may not disclose or use any proprietary or client information for personal gain or external purposes.</p>
-<hr class="divider"/>
-<h3>5. Code of Conduct</h3>
-<ul>
-  <li>Maintain professionalism and integrity in all communications.</li>
-  <li>Adhere to workplace policies and attendance norms.</li>
-  <li>Uphold the creative and ethical standards that Butter Toast is known for.</li>
-</ul>
-<hr class="divider"/>
-<h3>6. Termination</h3>
-<p>Either party may bring this internship to a close at any time. In cases of misconduct or breach of confidentiality, HATCHX INDIA reserves the right to terminate immediately.</p>
-<hr class="divider"/>
-<h3>7. Entire Agreement</h3>
-<p>This letter constitutes the entire understanding between you and HATCHX INDIA (Butter Toast) regarding this internship.</p>
-<p style="margin-top:14px;">We look forward to a productive and creative internship. Welcome aboard.</p>
-<p>Warm regards,<br/>For HATCHX INDIA (Butter Toast)</p>
+<p>You will receive a stipend of ${num(p.stipend) ? `<strong>&#8377; ${fmtMoney(num(p.stipend))} per month</strong>` : 'as discussed and recorded with the Company'}, payable monthly, subject to any applicable statutory deductions. The stipend is a contribution towards your learning engagement and not a salary.</p>
+
+<h3>3. Working Hours and Place</h3>
+<p>Your standard working day is <strong>eight (8) hours and thirty (30) minutes, inclusive of breaks</strong>, on the Company's working days, at ${s.company_address} or as otherwise required. By signing, you acknowledge and accept these hours.</p>
+
+<h3>4. Conduct</h3>
+<p>You agree to act professionally, to treat colleagues, clients, and partners with respect, to follow reasonable instructions, and to comply with all Company policies, including those on workplace conduct, anti-harassment, and information security. Serious or repeated misconduct &mdash; including dishonesty, harassment, breach of confidentiality, or misuse of Company property &mdash; may lead to immediate termination of the internship.</p>
+
+<h3>5. Confidentiality and Intellectual Property</h3>
+<p>During and after your internship, you will keep confidential all non-public information of the Company and its clients, and use it only for the Company's purposes. All work, designs, creative output, code, writing, and other materials you create during the internship, or using the Company's time, resources, or confidential information, belong exclusively to the Company. To the fullest extent permitted by law, you assign to the Company all intellectual-property rights in that work, and will sign any documents reasonably needed to confirm the Company's ownership. These obligations survive the end of your internship. On leaving, you will return or securely delete all Company materials and confidential information in your possession.</p>
+
+<h3>6. Ending the Internship</h3>
+<p>Either Party may end this internship by giving <strong>fifteen (15) days' written notice</strong>. The Company may end the internship immediately for misconduct or breach of this Agreement. On ending, you will return all Company property and hand over your work in an orderly manner.</p>
+
+<h3>7. Non-Solicitation</h3>
+<p>For <strong>six (6) months</strong> after your internship ends, you will not solicit or attempt to entice away any employee, contractor, or client of the Company with whom you worked during the internship, for a competing purpose. <span class="fun">[For legal review: post-engagement restraints are subject to Section 27 of the Indian Contract Act, 1872; counsel to confirm reasonableness for an intern.]</span></p>
+
+<h3>8. General</h3>
+<p>This Agreement, with the internship offer, is the entire agreement on your internship. If any clause is found invalid, the rest stands. This Agreement is governed by the laws of India, and the courts at Ahmedabad, Gujarat, have exclusive jurisdiction over any dispute.</p>
+
+<p>We're glad to have you in the kitchen. Sign below to confirm you've read and accepted these terms.</p>
+
 ${sigBoth()}
-${acceptBlock(p.employee_name)}`
+
+${acceptBlock(p.employee_name)}
+`
   return shell(content, s, ref, dateStr)
 }
+
 
 // ── FREELANCE AGREEMENT ───────────────────────────────────────────────────────
 function freelanceAgreement(p: Record<string,any>, s: typeof LH_DEFAULTS) {
