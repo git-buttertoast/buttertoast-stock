@@ -2002,11 +2002,12 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
 
 // ── Devices Page (fleet) ────────────────────────────────────────────────────
 // ── Add device modal (fleet-level) ──────────────────────────────────────────
-function AddDeviceModal({ employees, onClose, onAdded, showToast }: {
+function AddDeviceModal({ employees, onClose, onAdded, showToast, editDevice }: {
   employees: { id: string; full_name: string }[]
   onClose: () => void
   onAdded: () => void
   showToast: (m: string, t?: 'ok' | 'fail') => void
+  editDevice?: (EmployeeDevice & { holder?: { full_name: string } | null }) | null
 }) {
   const today = new Date().toISOString().split('T')[0]
   const blank = {
@@ -2015,8 +2016,21 @@ function AddDeviceModal({ employees, onClose, onAdded, showToast }: {
     date_added: today, depreciation_rate: '0.20',
     condition_at_handover: 'good', condition_notes: '', notes: '',
   }
-  const [form, setForm] = useState<Record<string, string>>(blank)
-  const [holder, setHolder] = useState('')
+  const [form, setForm] = useState<Record<string, string>>(editDevice ? {
+    ownership: editDevice.ownership, device_type: editDevice.device_type,
+    make: editDevice.make || '', model: editDevice.model || '', serial_number: editDevice.serial_number || '',
+    imei: editDevice.imei || '', color: editDevice.color || '', specs: editDevice.specs || '',
+    accessories: editDevice.accessories || '',
+    purchase_value: editDevice.purchase_value != null ? String(editDevice.purchase_value) : '',
+    purchase_date: editDevice.purchase_date || '', date_added: editDevice.date_added || today,
+    depreciation_rate: editDevice.depreciation_rate != null ? String(editDevice.depreciation_rate) : '0.20',
+    condition_at_handover: editDevice.condition_at_handover || 'good',
+    condition_notes: editDevice.condition_notes || '', notes: editDevice.notes || '',
+  } : blank)
+  const [holder, setHolder] = useState(editDevice?.profile_id || '')
+  const empOptions = editDevice?.profile_id && editDevice.holder?.full_name && !employees.some(e => e.id === editDevice.profile_id)
+    ? [{ id: editDevice.profile_id, full_name: editDevice.holder.full_name + ' (inactive)' }, ...employees]
+    : employees
   const [saving, setSaving] = useState(false)
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
   const fld = (key: string, label: string, type = 'text', ph = '') => (
@@ -2030,9 +2044,7 @@ function AddDeviceModal({ employees, onClose, onAdded, showToast }: {
     if (!form.make && !form.model) { showToast('Add at least a make or model.', 'fail'); return }
     setSaving(true)
     const holderId = holder || null
-    const status = holderId ? 'assigned' : 'unassigned'
-    const payload: Record<string, any> = {
-      profile_id: holderId,
+    const attrs: Record<string, any> = {
       ownership: form.ownership,
       device_type: form.device_type,
       make: form.make.trim() || null,
@@ -2048,10 +2060,47 @@ function AddDeviceModal({ employees, onClose, onAdded, showToast }: {
       depreciation_rate: form.depreciation_rate ? parseFloat(form.depreciation_rate) : 0.20,
       condition_at_handover: form.condition_at_handover,
       condition_notes: form.condition_notes.trim() || null,
-      status,
-      assigned_date: holderId ? today : null,
       notes: form.notes.trim() || null,
     }
+
+    if (editDevice) {
+      const oldHolder = editDevice.profile_id || null
+      const holderChanged = holderId !== oldHolder
+      const keepFrozen = (editDevice.status === 'retired' || editDevice.status === 'lost') && !holderChanged
+      const status = keepFrozen ? editDevice.status : (holderId ? 'assigned' : 'unassigned')
+      const payload: Record<string, any> = { ...attrs, profile_id: holderId, status }
+      if (holderChanged) {
+        payload.assigned_date = holderId ? today : null
+        payload.returned_date = holderId ? null : today
+        payload.liability_document_id = null
+      }
+      if (holderChanged && oldHolder) {
+        await supabase.from('device_history').insert({
+          device_id: editDevice.id, profile_id: oldHolder, event: 'returned',
+          detail: `Returned by ${editDevice.holder?.full_name || 'previous holder'}`,
+          condition: form.condition_at_handover, event_date: today,
+        })
+      }
+      const res = await supabase.from('employee_devices').update(payload).eq('id', editDevice.id)
+      if (res.error) { setSaving(false); showToast('Could not save device: ' + res.error.message, 'fail'); return }
+      if (holderChanged && holderId) {
+        await supabase.from('device_history').insert({
+          device_id: editDevice.id, profile_id: holderId, event: 'reassigned',
+          detail: 'Reassigned to new holder', condition: form.condition_at_handover, event_date: today,
+        })
+      } else if (!holderChanged) {
+        await supabase.from('device_history').insert({
+          device_id: editDevice.id, profile_id: holderId, event: 'condition_change',
+          detail: 'Device record updated', condition: form.condition_at_handover,
+        })
+      }
+      setSaving(false)
+      showToast(holderChanged ? 'Device updated & reassigned. Generate a new agreement for the new holder.' : 'Device updated.')
+      onAdded(); onClose(); return
+    }
+
+    const status = holderId ? 'assigned' : 'unassigned'
+    const payload: Record<string, any> = { ...attrs, profile_id: holderId, status, assigned_date: holderId ? today : null }
     const res = await supabase.from('employee_devices').insert(payload).select('id').single()
     if (res.error || !res.data) { setSaving(false); showToast('Could not add device: ' + (res.error?.message || 'unknown'), 'fail'); return }
     if (holderId) {
@@ -2071,15 +2120,15 @@ function AddDeviceModal({ employees, onClose, onAdded, showToast }: {
       <div className="modal" style={{ maxWidth: 680 }}>
         <div className="modal-header">
           <div>
-            <div className="modal-title">Add device</div>
-            <div className="modal-sub">Add to the pool or assign to someone directly</div>
+            <div className="modal-title">{editDevice ? 'Edit device' : 'Add device'}</div>
+            <div className="modal-sub">{editDevice ? 'Update details or reassign the holder' : 'Add to the pool or assign to someone directly'}</div>
           </div>
         </div>
         <div className="modal-body">
           <div className="field"><label>Holder</label>
             <select className="inp" value={holder} onChange={e => setHolder(e.target.value)}>
               <option value="">In pool (unassigned)</option>
-              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.full_name}</option>)}
+              {empOptions.map(emp => <option key={emp.id} value={emp.id}>{emp.full_name}</option>)}
             </select>
           </div>
           <div className="field-row">
@@ -2135,7 +2184,7 @@ function AddDeviceModal({ employees, onClose, onAdded, showToast }: {
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" disabled={saving} onClick={save}>
-            {saving ? <><div className="spinner" /><span>Adding...</span></> : 'Add device'}
+            {saving ? <><div className="spinner" /><span>Saving...</span></> : (editDevice ? 'Save changes' : 'Add device')}
           </button>
         </div>
       </div>
@@ -2151,6 +2200,7 @@ function DevicesPage({ user, showToast }: { user: { id: string; full_name: strin
   const [ownershipFilter, setOwnershipFilter] = useState('')
 
   const [showAdd, setShowAdd] = useState(false)
+  const [editDevice, setEditDevice] = useState<(EmployeeDevice & { holder?: { full_name: string } | null }) | null>(null)
   const [employees, setEmployees] = useState<{ id: string; full_name: string }[]>([])
   useEffect(() => {
     supabase.from('profiles').select('id, full_name').eq('is_active', true).order('full_name')
@@ -2218,7 +2268,7 @@ function DevicesPage({ user, showToast }: { user: { id: string; full_name: strin
                 {filtered.map(d => {
                   const depVal = depreciatedValue(d.purchase_value, d.depreciation_rate, d.date_added)
                   return (
-                    <tr key={d.id}>
+                    <tr key={d.id} onClick={() => setEditDevice(d)} style={{ cursor: 'pointer' }}>
                       <td>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{[d.make, d.model].filter(Boolean).join(' ') || d.device_type}</div>
                         <div style={{ fontSize: 10.5, color: 'var(--text3)' }}>
@@ -2240,6 +2290,7 @@ function DevicesPage({ user, showToast }: { user: { id: string; full_name: strin
         )}
       </div>
       {showAdd && <AddDeviceModal employees={employees} onClose={() => setShowAdd(false)} onAdded={load} showToast={showToast} />}
+      {editDevice && <AddDeviceModal employees={employees} editDevice={editDevice} onClose={() => setEditDevice(null)} onAdded={load} showToast={showToast} />}
     </>
   )
 }
