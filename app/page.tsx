@@ -37,6 +37,9 @@ function mask(val: string | null, show = 4) {
   return val.slice(0, show).padEnd(val.length, '*')
 }
 
+// ── Drive (Apps Script endpoint; override via NEXT_PUBLIC_DRIVE_URL) ──
+const DRIVE_URL = process.env.NEXT_PUBLIC_DRIVE_URL || 'https://script.google.com/macros/s/AKfycbyVbz5RdpIuwkkyqrvccttilVhxKB71BXWblIC7jrLa4k8G6pqJLMSVWzdE11iq17yvaA/exec'
+
 // ── Toast ──────────────────────────────────────────────────────────────────
 type Toast = { id: number; msg: string; type: 'ok' | 'fail' }
 let toastId = 0
@@ -360,7 +363,7 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
   async function createDriveFolder() {
     setCreatingFolder(true)
     try {
-      const res = await fetch('https://script.google.com/macros/s/AKfycbyVbz5RdpIuwkkyqrvccttilVhxKB71BXWblIC7jrLa4k8G6pqJLMSVWzdE11iq17yvaA/exec', {
+      const res = await fetch(DRIVE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'create_folder', folderName: employee.full_name, parentFolder: 'Employees' })
@@ -877,7 +880,7 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
       const folderId = folderMatch ? folderMatch[1] : null
       if (folderId) {
         try {
-          const dr = await fetch('https://script.google.com/macros/s/AKfycbyVbz5RdpIuwkkyqrvccttilVhxKB71BXWblIC7jrLa4k8G6pqJLMSVWzdE11iq17yvaA/exec', {
+          const dr = await fetch(DRIVE_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'upload_file', folderId, fileName: fname, base64: b64, mimeType: uploadForm.file!.type || 'application/octet-stream' })
@@ -894,7 +897,7 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
         signed_copy_url: driveLink,
         is_current: true,
       })
-      showToast(driveLink ? 'Uploaded to Drive.' : 'Saved. No Drive folder linked for this employee.')
+      showToast(driveLink ? 'Uploaded to Drive.' : (folderId ? 'Saved, but Drive upload failed.' : 'Saved. No Drive folder linked for this employee.'), (!driveLink && folderId) ? 'fail' : 'ok')
       setUploading(false)
       setShowUpload(false)
       const { data } = await supabase.from('employee_documents').select('*').eq('profile_id', employee.id).order('created_at', { ascending: false })
@@ -1595,7 +1598,7 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     internship_end_date: '',
     internship_months: '',
     // appointment
-    monthly_ctc: '',
+    annual_ctc: '',
     duties: '',
     probation_end_date: '',
     // appraisal / salary revision
@@ -1650,7 +1653,7 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
       const rc     = rate.data?.[0]
       setForm(f => ({
         ...f,
-        monthly_ctc: f.monthly_ctc || (latest ? String(latest) : ''),
+        annual_ctc: f.annual_ctc || (latest ? String(latest) : ''),
         old_ctc:     f.old_ctc     || (prev   ? String(prev)   : latest ? String(latest) : ''),
         new_ctc:     f.new_ctc     || (latest ? String(latest) : ''),
         rate:        f.rate        || (rc?.amount ? String(rc.amount) : ''),
@@ -1745,7 +1748,7 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
         supersede_reason: reason || null,
         probation_ctc:  form.probation_ctc  ? parseFloat(form.probation_ctc)  : null,
         confirmed_ctc:  form.confirmed_ctc  ? parseFloat(form.confirmed_ctc)  : null,
-        monthly_ctc:    form.monthly_ctc    ? parseFloat(form.monthly_ctc)    : null,
+        annual_ctc:     form.annual_ctc     ? parseFloat(form.annual_ctc)     : null,
         old_ctc:        form.old_ctc        ? parseFloat(form.old_ctc)        : null,
         new_ctc:        form.new_ctc        ? parseFloat(form.new_ctc)        : null,
         stipend:        form.stipend        ? parseFloat(form.stipend)        : null,
@@ -1758,7 +1761,11 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     // Store HTML in sessionStorage then navigate -- no popup blocker, no size limit
     sessionStorage.setItem('bt_print_html', data.html)
     window.location.href = '/print'
-    showToast(data.driveLink ? 'Generated and saved to Drive. Opening document...' : 'Document ready. Opening...')
+    showToast(
+      data.driveStatus === 'failed' ? 'Generated, but saving to Drive failed.'
+      : data.driveLink ? 'Generated and saved to Drive. Opening document...'
+      : 'Document ready. Opening...',
+      data.driveStatus === 'failed' ? 'fail' : 'ok')
     onDone()
   }
 
@@ -1777,10 +1784,6 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     if (dt === 'offer_letter') return (
       <>
         <div className="field-row">
-          {fMoney('probation_ctc', 'Probation CTC (in-hand / month)')}
-          {fMoney('confirmed_ctc', 'Confirmed CTC (in-hand / month)')}
-        </div>
-        <div className="field-row">
           {f('probation_months', 'Probation months', 'number', '3')}
           {f('reports_to_name', 'Reporting to', 'text', 'Auto-filled')}
         </div>
@@ -1798,7 +1801,7 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     )
     if (dt === 'appointment_letter') return (
       <>
-        {fMoney('monthly_ctc', 'Annual CTC (gross)')}
+        {fMoney('annual_ctc', 'Annual CTC (gross)')}
         {fMoney('confirmed_ctc', 'Post-confirmation Annual CTC (if different)')}
         <div className="field-row">
           {f('probation_end_date', 'Probation End Date', 'date')}

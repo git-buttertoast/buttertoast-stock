@@ -6,7 +6,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const DRIVE_URL = 'https://script.google.com/macros/s/AKfycbyVbz5RdpIuwkkyqrvccttilVhxKB71BXWblIC7jrLa4k8G6pqJLMSVWzdE11iq17yvaA/exec'
+const DRIVE_URL = process.env.DRIVE_URL || 'https://script.google.com/macros/s/AKfycbyVbz5RdpIuwkkyqrvccttilVhxKB71BXWblIC7jrLa4k8G6pqJLMSVWzdE11iq17yvaA/exec'
 
 // CORS: allow Scout (and other Butter Toast surfaces) to call this route cross-origin.
 const CORS_HEADERS: Record<string, string> = {
@@ -37,7 +37,7 @@ function fmtDate(d: string | null | undefined) {
 }
 
 function fmtMoney(n: number | null | undefined) {
-  if (!n) return '--'
+  if (n === null || n === undefined) return '--'
   return new Intl.NumberFormat('en-IN').format(n)
 }
 
@@ -60,7 +60,7 @@ function pronoun(gender: string, type: 'sub'|'obj'|'pos') {
   return                          { sub: 'they', obj: 'them', pos: 'their' }[type]
 }
 
-function generateRef(type: string, name: string) {
+function generateRef(type: string, name: string, idSuffix?: string) {
   const year = new Date().getFullYear()
   const prefix: Record<string,string> = {
     offer_letter:'OL', internship_offer:'IOL', appointment_letter:'APT',
@@ -68,7 +68,11 @@ function generateRef(type: string, name: string) {
     probation_confirmation:'PRB', salary_revision:'SAL', experience_letter:'EXP',
     internship_completion:'ICP', relieving_letter:'REL', warning_letter:'WRN',
   }
-  return `BT/${prefix[type]||'DOC'}/${year}/${name.split(' ')[0].toUpperCase()}`
+  const first = ((name || '').trim().split(/\s+/)[0] || 'DOC').toUpperCase()
+  // Append a short stable token from the person's id so two people who share a
+  // first name (or a regenerated doc for the same person) don't collide.
+  const suf = (idSuffix || '').replace(/-/g, '').slice(0, 6).toUpperCase()
+  return `BT/${prefix[type]||'DOC'}/${year}/${first}${suf ? '-' + suf : ''}`
 }
 
 function shell(content: string, settings: typeof LH_DEFAULTS, ref: string, dateStr: string) {
@@ -150,7 +154,7 @@ function acceptBlock(name: string) {
 
 // ── OFFER LETTER (slim, warm — like Google's 1-page cover) ────────────────────
 function offerLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('offer_letter', p.employee_name)
+  const ref = generateRef('offer_letter', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
   const monthly = toMonthly(num(p.annual_ctc))
   const content = `
@@ -188,7 +192,7 @@ ${acceptBlock(p.employee_name)}
 
 // ── APPOINTMENT LETTER (the anchor — full Google-style Contract of Employment) ─
 function appointmentLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('appointment_letter', p.employee_name)
+  const ref = generateRef('appointment_letter', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
   const annual = num(p.annual_ctc) ?? num(p.annual_confirmed_ctc) ?? num(p.annual_probation_ctc)
   const monthly = toMonthly(annual)
@@ -311,7 +315,7 @@ ${acceptBlock(p.employee_name)}
 
 // ── INTERNSHIP OFFER (slim, intern-appropriate) ──────────────────────────────
 function internshipOffer(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('internship_offer', p.employee_name)
+  const ref = generateRef('internship_offer', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
   const content = `
 <div class="doc-title">Internship Offer</div>
@@ -348,7 +352,7 @@ ${acceptBlock(p.employee_name)}
 
 // ── INTERNSHIP APPOINTMENT (right-sized contract for interns) ─────────────────
 function internshipAppointment(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('internship_appointment', p.employee_name)
+  const ref = generateRef('internship_appointment', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
   const content = `
 <div class="doc-title">Internship Appointment Letter</div>
@@ -402,7 +406,7 @@ ${acceptBlock(p.employee_name)}
 
 // ── FREELANCE AGREEMENT ───────────────────────────────────────────────────────
 function freelanceAgreement(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('freelance_agreement', p.employee_name)
+  const ref = generateRef('freelance_agreement', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
   const content = `
 <p>Dear <strong>${p.employee_name}</strong>,</p>
@@ -442,7 +446,7 @@ ${sigSingle(p.signatory)}
 
 // ── APPRAISAL ─────────────────────────────────────────────────────────────────
 function appraisalLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('appraisal', p.employee_name)
+  const ref = generateRef('appraisal', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
   const content = `
 <p>Dear <strong>${p.employee_name}</strong>,</p>
@@ -467,7 +471,7 @@ ${sigSingle(p.signatory)}`
 // loss, with a mandatory "show cause" opportunity and the 50%-of-wages-per-cycle
 // statutory limit. VET WITH A LAWYER before relying on it for recovery.
 function deviceHandover(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('device_handover', p.employee_name)
+  const ref = generateRef('device_handover', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
   const dev = p.device || {}
   const baseVal = dev.purchase_value ? num(dev.purchase_value) : null
@@ -540,7 +544,7 @@ ${sigBoth()}
 
 // ── SALARY REVISION ───────────────────────────────────────────────────────────
 function salaryRevision(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('salary_revision', p.employee_name)
+  const ref = generateRef('salary_revision', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
   const content = `
 <p>Dear <strong>${p.employee_name}</strong>,</p>
@@ -558,7 +562,7 @@ ${sigSingle(p.signatory)}`
 
 // ── PROBATION CONFIRMATION ────────────────────────────────────────────────────
 function probationConfirmation(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('probation_confirmation', p.employee_name)
+  const ref = generateRef('probation_confirmation', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
   const content = `
 <p>Dear <strong>${p.employee_name}</strong>,</p>
@@ -574,7 +578,7 @@ ${sigSingle(p.signatory)}`
 
 // ── EXPERIENCE LETTER ─────────────────────────────────────────────────────────
 function experienceLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('experience_letter', p.employee_name)
+  const ref = generateRef('experience_letter', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
   const joiningStr = fmtDate(p.joining_date)
   const lastDayStr = fmtDate(p.last_working_date)
@@ -593,7 +597,7 @@ ${sigSingle(p.signatory)}`
 
 // ── INTERNSHIP COMPLETION ─────────────────────────────────────────────────────
 function internshipCompletion(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('internship_completion', p.employee_name)
+  const ref = generateRef('internship_completion', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
   const joiningStr = fmtDate(p.joining_date)
   const endStr = fmtDate(p.internship_end_date || p.effective_date)
@@ -611,7 +615,7 @@ ${sigSingle(p.signatory)}`
 
 // ── RELIEVING LETTER ──────────────────────────────────────────────────────────
 function relievingLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('relieving_letter', p.employee_name)
+  const ref = generateRef('relieving_letter', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
   const first = p.employee_name.split(' ')[0]
   const pron_obj = pronoun(p.gender || 'neutral', 'obj')
@@ -627,7 +631,7 @@ ${sigSingle(p.signatory)}`
 
 // ── WARNING LETTER ────────────────────────────────────────────────────────────
 function warningLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
-  const ref = generateRef('warning_letter', p.employee_name)
+  const ref = generateRef('warning_letter', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
   const content = `
 <p>Dear <strong>${p.employee_name}</strong>,</p>
@@ -711,7 +715,10 @@ export async function POST(req: NextRequest) {
     const latestComp  = compData?.[0]?.amount || null
     const previousComp = compData?.[1]?.amount || null
 
-    // Annual figures: prefer explicit body values (sent by Scout as annual), else stored annual comp.
+    // Annual figures: prefer explicit body values, else stored annual comp.
+    // NOTE: body.monthly_ctc is a legacy alias that actually carries an ANNUAL
+    // amount (older Scout payloads). Stock now sends body.annual_ctc. Both are
+    // accepted here and treated as annual.
     const annualBase      = num(body.monthly_ctc)   ?? num(body.annual_ctc)    ?? latestComp
     const annualProbation = num(body.probation_ctc) ?? annualBase
     const annualConfirmed = num(body.confirmed_ctc) ?? null
@@ -765,6 +772,9 @@ export async function POST(req: NextRequest) {
 
     // Upload to Drive
     let driveLink: string | null = null
+    // driveStatus lets the client distinguish: no folder linked (skipped),
+    // an upload that was attempted but failed, and a clean success.
+    let driveStatus: 'uploaded' | 'failed' | 'skipped' = 'skipped'
     if (drive_folder_id) {
       try {
         const dr = await fetch(DRIVE_URL, {
@@ -773,8 +783,9 @@ export async function POST(req: NextRequest) {
           body: JSON.stringify({ action: 'upload_file', folderId: drive_folder_id, fileName: filename, base64: b64, mimeType: 'text/html' })
         })
         const drData = await dr.json()
-        if (drData?.fileLink) driveLink = drData.fileLink
-      } catch (e) { console.error('Drive upload failed:', e) }
+        if (drData?.fileLink) { driveLink = drData.fileLink; driveStatus = 'uploaded' }
+        else driveStatus = 'failed'
+      } catch (e) { console.error('Drive upload failed:', e); driveStatus = 'failed' }
     }
 
     // ── Versioning rules by document type ────────────────────────────────────
@@ -830,7 +841,7 @@ export async function POST(req: NextRequest) {
         .eq('status', 'pending')
     }
 
-    return NextResponse.json({ html, filename, driveLink }, { headers: CORS_HEADERS })
+    return NextResponse.json({ html, filename, driveLink, driveStatus }, { headers: CORS_HEADERS })
   } catch (err: any) {
     console.error('Generate error:', err)
     return NextResponse.json({ error: err.message }, { status: 500, headers: CORS_HEADERS })
