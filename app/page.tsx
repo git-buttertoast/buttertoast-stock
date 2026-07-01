@@ -1156,6 +1156,8 @@ function PersonDevices({ employee, showToast }: { employee: Employee; showToast:
       .order('created_at', { ascending: false }).limit(1).maybeSingle()
     if (docRow?.id) await supabase.from('employee_devices').update({ liability_document_id: docRow.id }).eq('id', d.id)
     sessionStorage.setItem('bt_print_html', data.html)
+    if (data.driveStatus === 'failed') sessionStorage.setItem('bt_drive_failed', '1')
+    else sessionStorage.removeItem('bt_drive_failed')
     window.location.href = '/print'
   }
 
@@ -1758,14 +1760,13 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     const data = await res.json()
     setGenerating(false)
     if (!data.html) { showToast(data.error || 'Generation failed.', 'fail'); return }
-    // Store HTML in sessionStorage then navigate -- no popup blocker, no size limit
+    // Store HTML in sessionStorage then navigate -- no popup blocker, no size limit.
+    // A toast here is never seen (we navigate away), so a Drive-save failure is
+    // carried across the navigation and surfaced on the /print page instead.
     sessionStorage.setItem('bt_print_html', data.html)
+    if (data.driveStatus === 'failed') sessionStorage.setItem('bt_drive_failed', '1')
+    else sessionStorage.removeItem('bt_drive_failed')
     window.location.href = '/print'
-    showToast(
-      data.driveStatus === 'failed' ? 'Generated, but saving to Drive failed.'
-      : data.driveLink ? 'Generated and saved to Drive. Opening document...'
-      : 'Document ready. Opening...',
-      data.driveStatus === 'failed' ? 'fail' : 'ok')
     onDone()
   }
 
