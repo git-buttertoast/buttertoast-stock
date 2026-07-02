@@ -14,7 +14,11 @@ function DateInput({ value, onChange, className = 'inp' }: { value: string, onCh
   const disp = value ? new Date(value + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
   return (
     <div style={{ position: 'relative', width: '100%' }}>
-      <input type="text" className={className} readOnly value={disp} placeholder="Select date" style={{ cursor: 'pointer' }} />
+      <input type="text" className={className} readOnly value={disp} placeholder="Select date" style={{ cursor: 'pointer', paddingRight: 34 }} />
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', opacity: 0.55 }}>
+        <rect x="2" y="3" width="12" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
+        <path d="M2 6h12M5 1.5v3M11 1.5v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      </svg>
       <input type="date" value={value} onChange={onChange} style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
     </div>
   )

@@ -152,7 +152,7 @@ function acceptBlock(name: string) {
 // All clauses to be lawyer-vetted. Clauses with uncertain Indian enforceability are
 // flagged inline with a subtle reviewer note the lawyer can find and the client can keep or cut.
 
-// ── OFFER LETTER (slim, warm — like Google's 1-page cover) ────────────────────
+// ── OFFER LETTER (slim, warm - like Google's 1-page cover) ────────────────────
 function offerLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   const ref = generateRef('offer_letter', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
@@ -190,7 +190,7 @@ ${acceptBlock(p.employee_name)}
   return shell(content, s, ref, dateStr)
 }
 
-// ── APPOINTMENT LETTER (the anchor — full Google-style Contract of Employment) ─
+// ── APPOINTMENT LETTER (the anchor - full Google-style Contract of Employment) ─
 function appointmentLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   const ref = generateRef('appointment_letter', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
@@ -488,7 +488,7 @@ function deviceHandover(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   row('Colour', dev.color)
   row('Specifications', dev.specs)
   row('Accessories Provided', dev.accessories)
-  row('Condition at Handover', dev.condition_at_handover ? String(dev.condition_at_handover).replace(/\b\w/g,(c:string)=>c.toUpperCase()) + (dev.condition_notes ? ` — ${dev.condition_notes}` : '') : '')
+  row('Condition at Handover', dev.condition_at_handover ? String(dev.condition_at_handover).replace(/\b\w/g,(c:string)=>c.toUpperCase()) + (dev.condition_notes ? ` (${dev.condition_notes})` : '') : '')
   row('Original Value', valStr)
   row('Current Assessed Value', curVal != null && baseVal != null && curVal !== baseVal ? `${curValStr} (after depreciation at ${ratePct}% per annum, reducing balance)` : curValStr)
   row('Date of Handover', fmtDate(dev.assigned_date || p.effective_date))
@@ -496,7 +496,7 @@ function deviceHandover(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   const content = `
 <div class="doc-title">Device Handover &amp; Liability Agreement</div>
 <p>Dear <strong>${p.employee_name}</strong>,</p>
-<p>This agreement records the handover of a company-owned device to you for use in the course of your employment with Butter Toast, a creative division of HATCHX INDIA, and sets out your responsibilities in respect of that device.</p>
+<p>This agreement records the handover of a company-owned device to you for use in the course of your employment with Butter Toast, a HATCHX INDIA Brand, and sets out your responsibilities in respect of that device.</p>
 <hr class="divider"/>
 <h3>1. Device Details</h3>
 <table class="terms" style="margin:12px 0;">${rows.join('')}</table>
@@ -588,7 +588,7 @@ function experienceLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   const pron_pos = pronoun(p.gender || 'neutral', 'pos')
   const content = `
 <p>To Whomsoever It May Concern,</p>
-<p>This is to certify that <strong>${p.employee_name}</strong> ${isExit ? `was associated with` : `is associated with`} <strong>Butter Toast</strong>, a creative division of HATCHX INDIA, ${isExit ? `from <strong>${joiningStr}</strong> to <strong>${lastDayStr}</strong>` : `since <strong>${joiningStr}</strong>`} as <strong>${p.role_title}</strong>${p.department ? ` in the ${p.department} department` : ''}.</p>
+<p>This is to certify that <strong>${p.employee_name}</strong> ${isExit ? `was associated with` : `is associated with`} <strong>Butter Toast</strong>, a HATCHX INDIA Brand, ${isExit ? `from <strong>${joiningStr}</strong> to <strong>${lastDayStr}</strong>` : `since <strong>${joiningStr}</strong>`} as <strong>${p.role_title}</strong>${p.department ? ` in the ${p.department} department` : ''}.</p>
 <p>During ${pron_pos} ${isExit ? 'tenure' : 'association'} with us, ${first} has demonstrated professionalism, dedication, and a strong commitment to ${pron_pos} role. ${pro.charAt(0).toUpperCase() + pro.slice(1)} has been a valued member of the team.${p.notes ? ` ${p.notes}` : ''}</p>
 <p>This letter is issued at the request of ${first} and is valid as on the date of issue. We wish ${pronoun(p.gender || 'neutral', 'obj')} the very best in ${pron_pos} future endeavours.</p>
 ${sigSingle(p.signatory)}`
@@ -605,7 +605,7 @@ function internshipCompletion(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   const pron_pos = pronoun(p.gender || 'neutral', 'pos')
   const content = `
 <p>To Whomsoever It May Concern,</p>
-<p>This is to certify that <strong>${p.employee_name}</strong> has successfully completed an internship with <strong>Butter Toast</strong>, a creative division of HATCHX INDIA, as <strong>${p.role_title}</strong>${p.department ? ` in the ${p.department} department` : ''}.</p>
+<p>This is to certify that <strong>${p.employee_name}</strong> has successfully completed an internship with <strong>Butter Toast</strong>, a HATCHX INDIA Brand, as <strong>${p.role_title}</strong>${p.department ? ` in the ${p.department} department` : ''}.</p>
 <p>The internship was undertaken from <strong>${joiningStr}</strong> to <strong>${endStr}</strong>.</p>
 <p>During this period, ${first} demonstrated enthusiasm, creativity, and a genuine commitment to ${pron_pos} work. ${pron_pos.charAt(0).toUpperCase() + pron_pos.slice(1)} contributions to the team were meaningful and appreciated.${p.notes ? ` ${p.notes}` : ''}</p>
 <p>We wish ${pronoun(p.gender || 'neutral', 'obj')} the very best in ${pron_pos} future endeavours.</p>
@@ -793,7 +793,7 @@ export async function POST(req: NextRequest) {
     // should hold ONE current copy. Regenerating flips the old one to
     // is_current=false, bumps the version, and records WHY it was replaced.
     // Repeatable documents (appraisal, salary_revision, warning, etc.) just add
-    // a new row each time — they are genuine history, not replacements.
+    // a new row each time - they are genuine history, not replacements.
     const ONE_TIME_TYPES = ['offer_letter', 'internship_offer', 'appointment_letter', 'internship_appointment']
     let newVersion = 1
     const supersedeReason = (body.supersede_reason || '').trim()
