@@ -358,10 +358,22 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
   const [saving, setSaving] = useState(false)
   const [creatingFolder, setCreatingFolder] = useState(false)
   const [driveFolderUrl, setDriveFolderUrl] = useState(ep?.drive_folder_url || '')
+  const [kycPhone, setKycPhone] = useState('')
 
   useEffect(() => {
     supabase.from('profiles').select('id,full_name').eq('is_active', true).order('full_name')
       .then(({ data }) => setAllEmployees((data || []).filter(e => e.id !== employee.id)))
+  }, [employee.id])
+
+  useEffect(() => {
+    supabase.from('employee_kyc').select('personal_phone').eq('profile_id', employee.id).maybeSingle()
+      .then(({ data }) => {
+        const pp = data?.personal_phone || ''
+        if (pp) {
+          setKycPhone(pp)
+          setForm(f => (f.phone ? f : { ...f, phone: pp }))
+        }
+      })
   }, [employee.id])
 
   async function createDriveFolder() {
@@ -399,9 +411,11 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
       reports_to: form.reports_to || null,
       last_day: (form as any).last_day || null,
     }).eq('id', ep?.id || '')
-    if (form.phone !== employee.phone) {
+    if (form.phone !== (employee.phone || '')) {
       await supabase.from('profiles').update({ phone: form.phone || null }).eq('id', employee.id)
     }
+    // keep KYC Personal Phone in sync (no-op if no KYC row exists yet)
+    await supabase.from('employee_kyc').update({ personal_phone: form.phone || null }).eq('profile_id', employee.id)
     setSaving(false)
     if (error) { showToast('Failed to save.', 'fail'); return }
     showToast('Details saved.')
@@ -423,7 +437,7 @@ function PersonDetails({ employee, onRefresh, showToast }: { employee: Employee;
     ['Reports To', reportsToName],
     ['Status', ep?.status || '--'],
     ['Email', employee.email],
-    ['Phone', employee.phone || '--'],
+    ['Phone', employee.phone || kycPhone || '--'],
   ]
   const hasDriveFolder = !!(driveFolderUrl || ep?.drive_folder_url)
 
@@ -764,12 +778,14 @@ function PersonKYC({ employee, showToast }: { employee: Employee; showToast: (m:
           aadhaar_number: data.aadhaar_number || '', pan_number: data.pan_number || '',
           bank_name: data.bank_name || '', account_number: data.account_number || '', ifsc_code: data.ifsc_code || '',
           date_of_birth: data.date_of_birth || '', blood_group: data.blood_group || '',
-          personal_email: data.personal_email || '', personal_phone: data.personal_phone || '',
+          personal_email: data.personal_email || '', personal_phone: data.personal_phone || employee.phone || '',
           permanent_address: data.permanent_address || '',
           emergency_contact_name: data.emergency_contact_name || '',
           emergency_contact_phone: data.emergency_contact_phone || '',
           emergency_contact_relation: data.emergency_contact_relation || '',
         })
+      } else {
+        setForm(f => ({ ...f, personal_phone: employee.phone || '' }))
       }
     })
   }, [employee.id])
@@ -788,6 +804,8 @@ function PersonKYC({ employee, showToast }: { employee: Employee; showToast: (m:
       : await supabase.from('employee_kyc').insert(payload)
     setSaving(false)
     if (r.error) { showToast('Failed to save: ' + r.error.message, 'fail'); return }
+    // keep profile Phone in sync with KYC Personal Phone
+    await supabase.from('profiles').update({ phone: (form.personal_phone || '').trim() || null }).eq('id', employee.id)
     showToast('KYC saved.')
     const { data } = await supabase.from('employee_kyc').select('*').eq('profile_id', employee.id).single()
     if (data) setKyc(data)
