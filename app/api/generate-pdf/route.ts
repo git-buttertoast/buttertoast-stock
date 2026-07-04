@@ -146,6 +146,53 @@ function acceptBlock(name: string) {
   </div>`
 }
 
+// ── TEMPLATE ENGINE (editable document templates) ────────────────────────────
+// Maps a signature variant chosen in the template editor to the real block.
+// company_both = two equal columns; the single variants render one left-aligned
+// column; employee_accept is its own block. Each carries its own top margin, so
+// any combination (or omission) stacks cleanly with no gap or overlap.
+function sigServer(variant: string, p: Record<string,any>): string {
+  switch (variant) {
+    case 'company_both':       return sigBoth()
+    case 'company_founder':    return sigSingle('aakash')
+    case 'company_proprietor': return sigSingle('niki')
+    case 'employee_accept':    return acceptBlock(p.employee_name || '')
+    default:                   return ''
+  }
+}
+
+// Collapse {{#KEY}}...{{/KEY}} blocks, innermost first, so nesting works.
+function renderConditionals(s: string, p: Record<string,any>): string {
+  const re = /\{\{#([a-zA-Z0-9_]+)\}\}((?:(?!\{\{#)[\s\S])*?)\{\{\/\1\}\}/
+  let guard = 0
+  while (re.test(s)) {
+    s = s.replace(re, (_m, key, inner) => {
+      const v = p[key]
+      const truthy = !(v === null || v === undefined || v === '' || v === false)
+      return truthy ? inner : ''
+    })
+    if (++guard > 500) break
+  }
+  return s
+}
+
+// Render a template body against the person's data. Order matters: signatures
+// first, then conditionals, then dates, money, and finally plain fields. A
+// missing field prints as a visible [Bracket] so gaps are obvious.
+function renderTemplateBody(body: string, p: Record<string,any>): string {
+  let out = String(body)
+  out = out.replace(/\{\{sig\.([a-zA-Z0-9_]+)\}\}/g, (_m, v) => sigServer(v, p))
+  out = renderConditionals(out, p)
+  out = out.replace(/\{\{d\.([a-zA-Z0-9_]+)\}\}/g, (_m, k) => fmtDate(p[k]))
+  out = out.replace(/\{\{m\.([a-zA-Z0-9_]+)\}\}/g, (_m, k) => fmtMoney(num(p[k])))
+  out = out.replace(/\{\{f\.([a-zA-Z0-9_]+)\}\}/g, (_m, k) => {
+    const v = p[k]
+    if (v === null || v === undefined || v === '') return '[' + String(k).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) + ']'
+    return String(v)
+  })
+  return out
+}
+
 // ── NEW GOOGLE-GRADE EMPLOYMENT LETTERS ──────────────────────────────────────
 // Google's legal spine, Butter Toast's soul.
 // Warm framing at open/close; crisp, serious legal language in the operative clauses.
@@ -764,8 +811,29 @@ export async function POST(req: NextRequest) {
     }
 
     const gen = generators[document_type]
-    if (!gen) return NextResponse.json({ error: `Unknown document type: ${document_type}` }, { status: 400 })
-    const html = gen(p, settings)
+    // Template override: if an active, non-deleted template exists for this doc
+    // type, render from it. Otherwise fall back to the vetted code generator.
+    // With no templates seeded, this always takes the code path (no change).
+    let html: string
+    let renderedBody: string | null = null
+    let usedTemplateVersionId: string | null = null
+    const { data: tpl } = await supabase
+      .from('document_templates')
+      .select('id, is_one_time, document_template_versions(id, body_html, is_active)')
+      .eq('key', document_type)
+      .is('deleted_at', null)
+      .maybeSingle()
+    const activeVer = ((tpl as any)?.document_template_versions || []).find((v: any) => v.is_active)
+    if (tpl && activeVer) {
+      const ref = generateRef(document_type, p.employee_name, p.profile_id || p.candidate_id)
+      renderedBody = renderTemplateBody(activeVer.body_html, p)
+      html = shell(renderedBody, settings, ref, fmtDate(p.effective_date))
+      usedTemplateVersionId = activeVer.id
+    } else if (gen) {
+      html = gen(p, settings)
+    } else {
+      return NextResponse.json({ error: `Unknown document type: ${document_type}` }, { status: 400, headers: CORS_HEADERS })
+    }
 
     const b64 = Buffer.from(html, 'utf-8').toString('base64')
     const filename = `${document_type.replace(/_/g,'-')}-${(p.employee_name).replace(/\s+/g,'-').toLowerCase()}-${new Date().toISOString().split('T')[0]}.html`
@@ -829,6 +897,8 @@ export async function POST(req: NextRequest) {
       status: 'generated',
       file_url: driveLink,
       is_current: true,
+      content_html: renderedBody,
+      template_version_id: usedTemplateVersionId,
       metadata: supersedeReason ? { ...p, supersede_reason: supersedeReason } : p,
       generated_at: new Date().toISOString(),
     })
