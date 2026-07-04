@@ -1026,7 +1026,7 @@ const DEVICE_STATUS_COLOR: Record<string,string> = {
 }
 
 function inr(n: number | null | undefined) {
-  if (n == null) return '—'
+  if (n == null) return '-'
   return '₹' + Number(n).toLocaleString('en-IN')
 }
 
@@ -1328,7 +1328,7 @@ function PersonDevices({ employee, showToast }: { employee: Employee; showToast:
 }
 
 // ── Reassign device modal ───────────────────────────────────────────────────
-// Records the return from the current holder (with return condition — their
+// Records the return from the current holder (with return condition - their
 // liability agreement stays valid until this point), then the handover to the
 // new holder (new condition baseline). Writes both history events.
 function ReassignModal({ device, fromName, employees, onClose, onDone, showToast }: {
@@ -1353,7 +1353,7 @@ function ReassignModal({ device, fromName, employees, onClose, onDone, showToast
     // 1. Record return from old holder (their agreement was valid until this point).
     await supabase.from('device_history').insert({
       device_id: device.id, profile_id: device.profile_id, event: 'returned',
-      detail: `Returned by ${fromName}` + (returnNotes ? ` — ${returnNotes}` : ''),
+      detail: `Returned by ${fromName}` + (returnNotes ? ` - ${returnNotes}` : ''),
       condition: returnCondition, event_date: today,
     })
     // 2. Move device to new holder with new condition baseline. Clear the old
@@ -1367,7 +1367,7 @@ function ReassignModal({ device, fromName, employees, onClose, onDone, showToast
     // 3. Record handover to new holder.
     await supabase.from('device_history').insert({
       device_id: device.id, profile_id: toId, event: 'reassigned',
-      detail: `Reassigned to new holder` + (newNotes ? ` — ${newNotes}` : ''),
+      detail: `Reassigned to new holder` + (newNotes ? ` - ${newNotes}` : ''),
       condition: newCondition, event_date: today,
     })
     setSaving(false)
@@ -1381,7 +1381,7 @@ function ReassignModal({ device, fromName, employees, onClose, onDone, showToast
         <div className="modal-header">
           <div>
             <div className="modal-title">Reassign device</div>
-            <div className="modal-sub">{[device.make, device.model].filter(Boolean).join(' ')} — currently with {fromName}</div>
+            <div className="modal-sub">{[device.make, device.model].filter(Boolean).join(' ')} - currently with {fromName}</div>
           </div>
         </div>
         <div className="modal-body">
@@ -1395,7 +1395,7 @@ function ReassignModal({ device, fromName, employees, onClose, onDone, showToast
             </select>
           </div>
           <div className="field"><label>Return notes (any new damage?)</label>
-            <input className="inp" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="e.g. dent on lid corner — pre-existing or new?" />
+            <input className="inp" value={returnNotes} onChange={e => setReturnNotes(e.target.value)} placeholder="e.g. dent on lid corner - pre-existing or new?" />
           </div>
           <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '6px 0' }} />
           <div className="field"><label>Reassign to</label>
@@ -2312,9 +2312,9 @@ function DevicesPage({ user, showToast }: { user: { id: string; full_name: strin
                       </td>
                       <td style={{ fontSize: 12, color: 'var(--text2)' }}>{d.holder?.full_name || <span style={{ color: 'var(--text3)' }}>In pool</span>}</td>
                       <td><span style={{ fontSize: 11, fontWeight: 600, color: DEVICE_STATUS_COLOR[d.status] || 'var(--text3)' }}>{DEVICE_STATUS_LABELS[d.status] || d.status}</span></td>
-                      <td style={{ fontSize: 11.5, color: 'var(--text2)', textTransform: 'capitalize' }}>{d.condition_at_handover || '—'}</td>
-                      <td style={{ textAlign: 'right', fontSize: 12, color: 'var(--text2)' }}>{d.ownership === 'company' ? inr(d.purchase_value) : '—'}</td>
-                      <td style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{d.ownership === 'company' ? inr(depVal) : '—'}</td>
+                      <td style={{ fontSize: 11.5, color: 'var(--text2)', textTransform: 'capitalize' }}>{d.condition_at_handover || '-'}</td>
+                      <td style={{ textAlign: 'right', fontSize: 12, color: 'var(--text2)' }}>{d.ownership === 'company' ? inr(d.purchase_value) : '-'}</td>
+                      <td style={{ textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--text)' }}>{d.ownership === 'company' ? inr(depVal) : '-'}</td>
                     </tr>
                   )
                 })}
