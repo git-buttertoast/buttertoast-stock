@@ -65,9 +65,17 @@ export default function StockApp() {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { setLoading(false); return }
       const { data: profile } = await supabase.from('profiles').select('id,full_name').eq('id', session.user.id).single()
-      const { data: urRows } = await supabase.from('user_roles').select('roles(name)').eq('user_id', session.user.id).limit(10)
-      const role = (urRows as any)?.[0]?.roles?.name || 'viewer'
-      if (!['admin', 'hr'].includes(role)) { setLoading(false); return }
+      let role = 'viewer'
+      const { data: _acc } = (await supabase.rpc('my_access')) as any
+      if (_acc && (_acc.platform_admin || (_acc.apps && Object.keys(_acc.apps).length))) {
+        const _lvl = _acc.platform_admin ? 'manage' : ((_acc.apps && _acc.apps['stock']) || 'none')
+        role = (_acc.platform_admin || _lvl === 'manage') ? 'admin' : ((_acc.craft && _acc.craft !== 'none') ? _acc.craft : (_lvl === 'edit' ? 'account_manager' : 'viewer'))
+        if (_lvl === 'none' && !_acc.platform_admin) { setLoading(false); return }
+      } else {
+        const { data: urRows } = await supabase.from('user_roles').select('roles(name)').eq('user_id', session.user.id).limit(10)
+        role = (urRows as any)?.[0]?.roles?.name || 'viewer'
+        if (!['admin', 'hr'].includes(role)) { setLoading(false); return }
+      }
       setUser({ id: session.user.id, full_name: profile?.full_name || '', role })
       setLoading(false)
     })
