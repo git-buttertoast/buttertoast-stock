@@ -2100,17 +2100,7 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
             <div className="modal-body">
               <style>{`.bt-doc-preview{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-size:12px;line-height:1.7;color:#1a1a1a}.bt-doc-preview .doc-title{font-size:16px;font-weight:700;text-align:center;margin-bottom:20px}.bt-doc-preview h3{font-size:12px;font-weight:700;margin:18px 0 6px;border-bottom:1px solid #e0e0e0;padding-bottom:4px}.bt-doc-preview p{margin:0 0 10px}.bt-doc-preview ul{margin:6px 0 12px 18px}.bt-doc-preview table.terms{width:100%;border-collapse:collapse;margin:10px 0 14px}.bt-doc-preview table.terms td{padding:6px 10px;border:1px solid #ddd;font-size:11.5px;vertical-align:top}.bt-doc-preview table.terms td:first-child{width:38%;font-weight:600;background:#f8f8f8}`}</style>
               {review.editable ? (
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <div style={{ flex: '1 1 320px', minWidth: 280 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Body for this employee</div>
-                    <FriendlyLetterEditor body={editBody} onChange={setEditBody} sample={review.data} renderPreview={tplRenderPreview} />
-                  </div>
-                  <div style={{ flex: '1 1 320px', minWidth: 280 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live preview</div>
-                    <div className="bt-doc-preview" style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 16, minHeight: 340, background: '#fff', overflow: 'auto' }}
-                      dangerouslySetInnerHTML={{ __html: tplRenderPreview(editBody, review.data) }} />
-                  </div>
-                </div>
+                <FriendlyLetterEditor body={editBody} onChange={setEditBody} sample={review.data} renderPreview={tplRenderPreview} />
               ) : (
                 <div>
                   <iframe title="Document preview" srcDoc={review.html} style={{ width: '100%', height: 460, border: '1px solid var(--border)', borderRadius: 10, background: '#fff' }} />
@@ -2606,14 +2596,13 @@ async function tplApi(payload: any) {
 }
 
 // ============================================================================
-// Friendly letter editor. The parsed model is the single source of truth; text
-// is edited in uncontrolled single-run fields (no cursor jumps), and fields /
-// signatures / optional blocks are atomic widgets that can be inserted, moved,
-// or deleted whole but never broken. An Advanced (source) toggle is always
-// available. Any block the user does not touch is written back exactly.
+// Friendly letter editor (document look). The parsed model is the single source
+// of truth; text is edited in uncontrolled single-run fields (no cursor jumps),
+// and fields / signatures / optional blocks are atomic. It looks like a sheet of
+// paper: you edit the letter directly, auto-filled details are gently highlighted,
+// fixed layout renders the way it prints, and raw source is tucked away.
 // ============================================================================
 
-// ---- model types ----
 type Inline =
   | { t: 'text'; v: string }
   | { t: 'chip'; kind: string; key: string }
@@ -2647,8 +2636,9 @@ function splitBlocks(body: string): Seg[] {
     if (ch === '<') {
       const end = matchElement(body, i); if (end === -1) throw new Error('unbalanced @' + i)
       const raw = body.slice(i, end), tag = /^<([a-zA-Z0-9]+)/.exec(raw)![1], prose = (tag === 'p' || tag === 'h3')
-      segs.push(prose ? { type: 'prose', tag, openRaw: '', children: [] } as any : { type: 'struct', tag, raw })
-      if (prose) { const last = segs[segs.length - 1] as any; last.raw = raw }
+      if (prose) segs.push({ type: 'prose', tag, openRaw: '', children: [] } as any)
+      else segs.push({ type: 'struct', tag, raw })
+      if (prose) (segs[segs.length - 1] as any).raw = raw
       i = end
     } else if (body.startsWith('{{sig.', i)) {
       const end = body.indexOf('}}', i) + 2; segs.push({ type: 'sig', raw: body.slice(i, end) }); i = end
@@ -2699,8 +2689,8 @@ function serInline(nodes: Inline[]): string {
 function bodyToModel(body: string): Seg[] {
   return splitBlocks(body).map(seg => {
     if (seg.type !== 'prose') return seg
-    const open = /^<([a-zA-Z0-9]+)([^>]*?)>/.exec((seg as any).raw)!
     const raw = (seg as any).raw as string
+    const open = /^<([a-zA-Z0-9]+)([^>]*?)>/.exec(raw)!
     const inner = raw.slice(open[0].length, raw.length - ('</' + open[1] + '>').length)
     return { type: 'prose', tag: open[1], openRaw: open[0], children: parseInline(inner) }
   })
@@ -2709,51 +2699,91 @@ function modelToBody(model: Seg[]): string {
   return model.map(seg => seg.type !== 'prose' ? (seg as any).raw : (seg as any).openRaw + serInline((seg as any).children) + '</' + (seg as any).tag + '>').join('')
 }
 
-// ---- display decode / safe encode (only the entities these letters use) ----
+// ---- display decode / safe encode ----
 const ENT: [string, string][] = [['&ldquo;', '\u201C'], ['&rdquo;', '\u201D'], ['&rsquo;', '\u2019'], ['&lsquo;', '\u2018'], ['&#8377;', '\u20B9'], ['&ndash;', '\u2013'], ['&nbsp;', '\u00A0'], ['&amp;', '&'], ['&lt;', '<'], ['&gt;', '>']]
 function decodeText(v: string) { let s = v; for (const [e, c] of ENT) s = s.split(e).join(c); return s }
 function encodeText(s: string) { return s.split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;') }
 
 // ---- friendly labels ----
 const FIELD_LABELS: Record<string, string> = {
-  employee_name: 'Employee name', first_name: 'First name', role_title: 'Role / title', department: 'Department',
-  reports_to_name: 'Reporting to', employee_address: 'Employee address', company_address: 'Company address', gst: 'GST number',
+  employee_name: 'Employee name', first_name: 'First name', role_title: 'Role', department: 'Department',
+  reports_to_name: 'Manager', employee_address: 'Employee address', company_address: 'Company address', gst: 'GST number',
   joining_date: 'Joining date', effective_date: 'Effective date', probation_end_date: 'Probation end date',
   internship_end_date: 'Internship end date', internship_end_display: 'Internship end date', last_working_date: 'Last working day',
-  internship_months: 'Internship duration', annual_ctc: 'Annual CTC', monthly_ctc: 'Monthly CTC',
-  appointment_annual: 'Annual CTC', appointment_monthly: 'Monthly CTC', stipend: 'Monthly stipend', rate: 'Rate',
-  rate_suffix: 'Rate basis', notes: 'Notes', pron_sub: 'Pronoun (they)', pron_obj: 'Pronoun (them)', pron_pos: 'Pronoun (their)',
-  pron_sub_cap: 'Pronoun (They)', pron_pos_cap: 'Pronoun (Their)',
+  internship_months: 'Duration', annual_ctc: 'Annual CTC', monthly_ctc: 'Monthly CTC',
+  appointment_annual: 'Annual CTC', appointment_monthly: 'Monthly CTC', stipend: 'Stipend', rate: 'Rate',
+  rate_suffix: 'Rate basis', notes: 'Notes', pron_sub: 'they', pron_obj: 'them', pron_pos: 'their',
+  pron_sub_cap: 'They', pron_pos_cap: 'Their',
 }
 const COND_LABELS: Record<string, string> = {
-  department: 'Department is set', reports_to_name: 'Reporting line is set', notes: 'Notes are present', no_notes: 'No notes',
-  probation_end_date: 'Probation end date is set', no_probation_end: 'No probation end date', internship_end_date: 'Internship end date is set',
-  internship_months: 'Duration is set', has_monthly: 'Monthly CTC shown', has_appt_monthly: 'Monthly CTC shown',
-  has_stipend: 'Stipend is set', no_stipend: 'No stipend', is_exit: 'If leaving', not_exit: 'If still employed', role_title: 'Role is set',
+  department: 'if department is set', reports_to_name: 'if a manager is set', notes: 'if notes are added', no_notes: 'if no notes',
+  probation_end_date: 'if probation end date is set', no_probation_end: 'if no probation end date', internship_end_date: 'if internship end date is set',
+  internship_months: 'if duration is set', has_monthly: 'if monthly CTC shown', has_appt_monthly: 'if monthly CTC shown',
+  has_stipend: 'if a stipend is set', no_stipend: 'if no stipend', is_exit: 'if the person is leaving', not_exit: 'if still employed', role_title: 'if a role is set',
 }
 const SIG_LABELS: Record<string, string> = {
-  company_both: 'Company (Aakash + Niki)', company_founder: 'Company (Aakash, Founder)', company_proprietor: 'Company (Niki, Proprietor)',
-  company_single: 'Company (chosen signatory)', employee_accept: 'Employee acceptance',
+  company_both: 'Company signatures (Aakash + Niki)', company_founder: 'Company signature (Aakash)', company_proprietor: 'Company signature (Niki)',
+  company_single: 'Company signature', employee_accept: 'Employee acceptance and signature',
 }
 function titleize(k: string) { return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }
 function fieldLabel(key: string) { return FIELD_LABELS[key] || titleize(key) }
-function condLabel(key: string) { return COND_LABELS[key] || titleize(key) }
+function condLabel(key: string) { return COND_LABELS[key] || ('if ' + titleize(key)) }
 function structLabel(seg: Seg): string {
   const raw = (seg as any).raw as string
   if ((seg as any).tag === 'table') return 'Details table'
   if ((seg as any).tag === 'hr') return 'Divider'
   if (/page-break/.test(raw)) return 'Page break'
-  if (/doc-title/.test(raw)) return 'Document title'
-  if (/class="accept"/.test(raw)) return 'Acceptance / signature area'
-  if (/height:\d/.test(raw)) return 'Spacer'
-  return 'Fixed block'
+  if (/doc-title/.test(raw)) return 'Title'
+  if (/class="accept"/.test(raw)) return 'Acceptance area'
+  if (/height:\d/.test(raw)) return 'Spacing'
+  return 'Fixed layout'
 }
 
-// ---- editor ----
+const CSS = `
+.bt-fed-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.bt-fed-seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.bt-fed-seg button{border:0;background:transparent;color:var(--text3);font-size:12px;font-weight:600;padding:6px 14px;cursor:pointer}
+.bt-fed-seg button.on{background:var(--bg3);color:var(--text)}
+.bt-fed-ins{font-size:12px;color:var(--text3);border:1px solid var(--border);background:var(--bg2);border-radius:8px;padding:6px 10px;cursor:pointer}
+.bt-fed-canvas{background:#e9eaed;border-radius:12px;padding:20px 14px;max-height:70vh;overflow:auto}
+.bt-fed-page{max-width:720px;margin:0 auto;background:#fff;color:#202124;box-shadow:0 1px 3px rgba(0,0,0,.14),0 1px 2px rgba(0,0,0,.08);border-radius:2px;padding:clamp(26px,5vw,60px);font-family:Arial,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14.5px;line-height:1.85}
+.bt-fed-page h3{font-size:15px;font-weight:700;margin:20px 0 6px}
+.bt-fed-page p{margin:0 0 12px}
+.bt-fed-blk{position:relative}
+.bt-fed-blk .bt-fed-del{position:absolute;top:2px;right:-22px;width:18px;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#c5c9d0;cursor:pointer;opacity:0;transition:opacity .12s;font-size:14px;line-height:1;user-select:none}
+.bt-fed-blk:hover .bt-fed-del{opacity:1}
+.bt-fed-blk .bt-fed-del:hover{background:#fce8e6;color:#d93025}
+.bt-fed-txt{outline:none;white-space:pre-wrap}
+.bt-fed-txt:focus{background:rgba(26,115,232,.06);border-radius:2px}
+.bt-fed-chip{background:#e8f0fe;color:#1967d2;border-radius:3px;padding:0 3px;font-weight:500;white-space:nowrap;cursor:default;position:relative}
+.bt-fed-chip .x{display:none;margin-left:3px;color:#5f6368;cursor:pointer;font-weight:700}
+.bt-fed-chip:hover .x{display:inline}
+.bt-fed-opt{background:rgba(251,191,36,.10);border-radius:3px;padding:0 2px;position:relative}
+.bt-fed-opt>.lbl{display:none;position:absolute;bottom:100%;left:0;background:#3c4043;color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;white-space:nowrap;margin-bottom:3px;z-index:5}
+.bt-fed-opt:hover>.lbl{display:block}
+.bt-fed-opt>.x{display:none;color:#9aa0a6;cursor:pointer;font-weight:700;margin-left:3px;font-size:11px}
+.bt-fed-opt:hover>.x{display:inline}
+.bt-fed-fixed{position:relative;margin:10px 0}
+.bt-fed-fixed .inner{border-radius:6px;transition:background .12s}
+.bt-fed-fixed:hover .inner{background:#f6f7f9}
+.bt-fed-fixed .tag{position:absolute;top:4px;right:6px;font-size:9px;font-weight:700;letter-spacing:.4px;color:#b0b4bb;text-transform:uppercase;opacity:0;transition:opacity .12s}
+.bt-fed-fixed:hover .tag{opacity:1}
+.bt-fed-sig{color:#9aa0a6;font-size:12px;font-style:italic;margin:14px 0;padding-left:2px}
+.bt-fed-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+.bt-fed-foot .hint{font-size:11px;color:var(--text3)}
+.bt-fed-adv{font-size:11px;color:var(--text3);background:none;border:0;cursor:pointer;text-decoration:underline;padding:0}
+.bt-fed-page table.terms{width:100%;border-collapse:collapse;margin:6px 0 12px}
+.bt-fed-page table.terms td{padding:6px 10px;border:1px solid #e0e0e0;font-size:13px;vertical-align:top}
+.bt-fed-page table.terms td:first-child{width:38%;font-weight:600;background:#f8f9fa}
+.bt-fed-page .doc-title{font-size:17px;font-weight:700;text-align:center;margin-bottom:18px}
+.bt-fed-page .fun{font-style:italic;color:#5f6368}
+`
+
 function FriendlyLetterEditor({ body, onChange, sample, renderPreview }: {
   body: string; onChange: (b: string) => void; sample: Record<string, any>; renderPreview: (body: string, p: any) => string
 }) {
   const [advanced, setAdvanced] = useState(false)
+  const [mode, setMode] = useState<'edit' | 'preview'>('edit')
   const parseError = useMemo(() => { try { bodyToModel(body); return null } catch (e: any) { return e?.message || 'parse error' } }, [body])
   const [model, setModel] = useState<Seg[]>(() => { try { return bodyToModel(body) } catch { return [] } })
   const [mountKey, setMountKey] = useState(0)
@@ -2763,69 +2793,49 @@ function FriendlyLetterEditor({ body, onChange, sample, renderPreview }: {
 
   useEffect(() => {
     if (body !== lastEmit.current) {
-      try { const m = bodyToModel(body); setModel(m); modelRef.current = m; setMountKey(k => k + 1); lastEmit.current = body } catch { /* leave as-is; advanced handles */ }
+      try { const m = bodyToModel(body); setModel(m); modelRef.current = m; setMountKey(k => k + 1); lastEmit.current = body } catch { /* advanced handles */ }
     }
   }, [body])
 
   const emit = useCallback((m: Seg[]) => { const b = modelToBody(m); lastEmit.current = b; onChange(b) }, [onChange])
   const commit = useCallback((m: Seg[]) => { modelRef.current = m; setModel(m); setMountKey(k => k + 1); emit(m) }, [emit])
-
   function cloneModel(): Seg[] { return JSON.parse(JSON.stringify(modelRef.current)) }
   function nodeAt(m: Seg[], path: number[]): any { let cur: any = (m[path[0]] as any).children; let node: any; for (let k = 1; k < path.length; k++) { node = cur[path[k]]; cur = node && node.children } return node }
   function parentArr(m: Seg[], path: number[]): any[] { let arr: any = (m[path[0]] as any).children; for (let k = 1; k < path.length - 1; k++) arr = arr[path[k]].children; return arr }
-
-  const onTextInput = (path: number[], el: HTMLElement) => {
-    const node = nodeAt(modelRef.current, path); if (!node || node.t !== 'text') return
-    node.v = encodeText(el.textContent || ''); emit(modelRef.current)
-  }
-  const deleteInline = (path: number[]) => { const m = cloneModel(); const arr = parentArr(m, path); arr.splice(path[path.length - 1], 1); commit(m) }
+  const onTextInput = (path: number[], el: HTMLElement) => { const node = nodeAt(modelRef.current, path); if (!node || node.t !== 'text') return; node.v = encodeText(el.textContent || ''); emit(modelRef.current) }
+  const deleteInline = (path: number[]) => { const m = cloneModel(); parentArr(m, path).splice(path[path.length - 1], 1); commit(m) }
   const deleteProse = (segIdx: number) => { const m = cloneModel(); m.splice(segIdx, 1); commit(m) }
-  const addParagraph = (afterSeg: number) => {
-    const m = cloneModel(); const seg: any = { type: 'prose', tag: 'p', openRaw: '<p>', children: [{ t: 'text', v: 'New paragraph.' }] }
-    m.splice(afterSeg + 1, 0, { type: 'gap', raw: '\n\n' } as any, seg); commit(m)
-  }
-  const insertAtFocus = (node: Inline, wrapCond?: boolean) => {
-    const fp = focusPath.current; if (fp == null) return
-    const m = cloneModel(); const seg: any = m[fp[0]]; if (!seg || seg.type !== 'prose') return
-    seg.children.push({ t: 'text', v: ' ' }); seg.children.push(node as any); commit(m)
-  }
+  const addParagraph = (afterSeg: number) => { const m = cloneModel(); m.splice(afterSeg + 1, 0, { type: 'gap', raw: '\n' } as any, { type: 'prose', tag: 'p', openRaw: '<p>', children: [{ t: 'text', v: 'New paragraph.' }] } as any); commit(m) }
+  const insertAtFocus = (node: Inline) => { const fp = focusPath.current; if (fp == null) return; const m = cloneModel(); const seg: any = m[fp[0]]; if (!seg || seg.type !== 'prose') return; seg.children.push({ t: 'text', v: ' ' } as any); seg.children.push(node as any); commit(m) }
 
-  const editableSpan = (path: number[], v: string, style?: React.CSSProperties) => (
-    <span
-      contentEditable suppressContentEditableWarning
+  const editableSpan = (path: number[], v: string) => (
+    <span className="bt-fed-txt" contentEditable suppressContentEditableWarning
       ref={el => { if (el && el.getAttribute('data-init') !== '1') { el.textContent = decodeText(v); el.setAttribute('data-init', '1') } }}
       onFocus={() => { focusPath.current = [path[0]] }}
       onInput={e => onTextInput(path, e.currentTarget)}
       onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
       onPaste={e => { e.preventDefault(); const t = e.clipboardData.getData('text/plain').replace(/\r?\n/g, ' '); document.execCommand('insertText', false, t) }}
-      style={{ outline: 'none', whiteSpace: 'pre-wrap', ...style }}
     />
-  )
-
-  const pill = (label: string, onDelete?: () => void, tint?: string) => (
-    <span contentEditable={false} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: tint || '#eef2ff', color: '#3730a3', border: '1px solid #c7d2fe', borderRadius: 6, padding: '1px 6px', margin: '0 2px', fontSize: 11, fontWeight: 600, userSelect: 'none', verticalAlign: 'baseline' }}>
-      {label}
-      {onDelete ? <span onClick={onDelete} style={{ cursor: 'pointer', color: '#9ca3af', fontWeight: 700 }} title="Remove">&times;</span> : null}
-    </span>
   )
 
   const renderInline = (nodes: Inline[], base: number[]): React.ReactNode =>
     nodes.map((nd, idx) => {
       const path = [...base, idx]
       if (nd.t === 'text') return <React.Fragment key={idx}>{editableSpan(path, nd.v)}</React.Fragment>
-      if (nd.t === 'chip') return <React.Fragment key={idx}>{pill(fieldLabel(nd.key), () => deleteInline(path))}</React.Fragment>
+      if (nd.t === 'chip') return (
+        <span key={idx} className="bt-fed-chip" contentEditable={false}>{fieldLabel(nd.key)}<span className="x" onClick={() => deleteInline(path)} title="Remove">&times;</span></span>
+      )
       if (nd.t === 'el') {
         if (nd.selfClose) return nd.tag === 'br' ? <br key={idx} /> : <span key={idx} contentEditable={false} />
         const inner = renderInline(nd.children, path)
         if (nd.tag === 'strong') return <strong key={idx}>{inner}</strong>
-        return <span key={idx} style={{ fontStyle: nd.tag === 'span' ? 'italic' : undefined, color: /class="fun"/.test(nd.openRaw) ? '#6b7280' : undefined }}>{inner}</span>
+        return <span key={idx} className={/class="fun"/.test(nd.openRaw) ? 'fun' : undefined}>{inner}</span>
       }
-      // conditional: labeled tinted block, editable inside, deletable whole
       return (
-        <span key={idx} contentEditable={false} style={{ display: 'inline', background: '#fff7ed', border: '1px dashed #fdba74', borderRadius: 6, padding: '1px 4px', margin: '0 1px' }}>
-          <span style={{ fontSize: 9, fontWeight: 700, color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.4px', marginRight: 4, userSelect: 'none' }}>{condLabel(nd.key)}</span>
+        <span key={idx} className="bt-fed-opt" contentEditable={false}>
+          <span className="lbl">Optional {condLabel(nd.key)}</span>
           <span contentEditable={false}>{renderInline(nd.children, path)}</span>
-          <span onClick={() => deleteInline(path)} style={{ cursor: 'pointer', color: '#9ca3af', fontWeight: 700, marginLeft: 4, fontSize: 11 }} title="Remove optional block">&times;</span>
+          <span className="x" onClick={() => deleteInline(path)} title="Remove optional part">&times;</span>
         </span>
       )
     })
@@ -2834,63 +2844,75 @@ function FriendlyLetterEditor({ body, onChange, sample, renderPreview }: {
     return (
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600 }}>{parseError ? 'Source mode (this letter has custom markup)' : 'Advanced (source) mode'}</span>
-          {!parseError ? <button className="btn btn-sm" onClick={() => setAdvanced(false)}>Back to simple editor</button> : null}
+          <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600 }}>{parseError ? 'Source view (this letter uses custom layout)' : 'Source view'}</span>
+          {!parseError ? <button className="btn btn-sm" onClick={() => setAdvanced(false)}>Back to document</button> : null}
         </div>
         <textarea className="inp" value={body} onChange={e => onChange(e.target.value)} spellCheck={false}
-          style={{ width: '100%', minHeight: 340, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 12, lineHeight: 1.5, resize: 'vertical' }} />
+          style={{ width: '100%', minHeight: 360, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 12, lineHeight: 1.5, resize: 'vertical' }} />
       </div>
     )
   }
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
-        <select className="inp" style={{ maxWidth: 170 }} value="" onChange={e => { if (e.target.value) { const m = /\{\{([fdm])\.([a-zA-Z0-9_]+)\}\}/.exec(e.target.value); if (m) insertAtFocus({ t: 'chip', kind: m[1], key: m[2] }) } e.target.value = '' }}>
-          <option value="">Insert field...</option>
-          <option value="{{f.employee_name}}">Employee name</option>
-          <option value="{{f.role_title}}">Role / title</option>
-          <option value="{{d.joining_date}}">Joining date</option>
-          <option value="{{d.effective_date}}">Effective date</option>
-          <option value="{{m.annual_ctc}}">Annual CTC</option>
-          <option value="{{m.stipend}}">Monthly stipend</option>
-        </select>
-        <button className="btn btn-sm" onClick={() => { if (focusPath.current) addParagraph(focusPath.current[0]) }}>+ Paragraph</button>
-        <div style={{ flex: 1 }} />
-        <button className="btn btn-sm" onClick={() => setAdvanced(true)}>Advanced (source)</button>
+      <style>{CSS}</style>
+      <div className="bt-fed-bar">
+        <div className="bt-fed-seg">
+          <button className={mode === 'edit' ? 'on' : ''} onClick={() => setMode('edit')}>Edit</button>
+          <button className={mode === 'preview' ? 'on' : ''} onClick={() => setMode('preview')}>Preview</button>
+        </div>
+        {mode === 'edit' ? (
+          <>
+            <select className="bt-fed-ins" value="" onChange={e => { if (e.target.value) { const m = /\{\{([fdm])\.([a-zA-Z0-9_]+)\}\}/.exec(e.target.value); if (m) insertAtFocus({ t: 'chip', kind: m[1], key: m[2] }) } e.target.value = '' }}>
+              <option value="">Insert detail...</option>
+              <option value="{{f.employee_name}}">Employee name</option>
+              <option value="{{f.role_title}}">Role</option>
+              <option value="{{d.joining_date}}">Joining date</option>
+              <option value="{{d.effective_date}}">Effective date</option>
+              <option value="{{m.annual_ctc}}">Annual CTC</option>
+              <option value="{{m.stipend}}">Stipend</option>
+            </select>
+            <button className="bt-fed-ins" onClick={() => { if (focusPath.current) addParagraph(focusPath.current[0]) }}>+ Paragraph</button>
+          </>
+        ) : null}
       </div>
 
-      <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff', color: '#1a1a1a', fontSize: 13, lineHeight: 1.7 }}>
-        {model.map((seg, si) => {
-          if (seg.type === 'gap') return null
-          if (seg.type === 'sig') {
-            const v = /\{\{sig\.([a-zA-Z0-9_]+)\}\}/.exec((seg as any).raw)
-            return <div key={mountKey + '-' + si} style={{ margin: '10px 0' }}>{pill('Signature: ' + (v ? (SIG_LABELS[v[1]] || v[1]) : ''), undefined, '#fee2e2')}</div>
-          }
-          if (seg.type === 'struct') {
-            return (
-              <div key={mountKey + '-' + si} contentEditable={false} style={{ margin: '8px 0', border: '1px solid #e5e7eb', borderRadius: 8, background: '#f9fafb' }}>
-                <div style={{ fontSize: 9, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.4px', padding: '4px 8px', borderBottom: '1px solid #e5e7eb' }}>Protected: {structLabel(seg)} (edit in Advanced)</div>
-                <div style={{ padding: 8, fontSize: 11, opacity: 0.85, pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: renderPreview((seg as any).raw, sample) }} />
-              </div>
-            )
-          }
-          const Tag = ((seg as any).tag === 'h3' ? 'h3' : 'p') as any
-          return (
-            <div key={mountKey + '-' + si} style={{ position: 'relative', margin: (seg as any).tag === 'h3' ? '14px 0 6px' : '8px 0' }}>
-              <Tag style={{ margin: 0, fontSize: (seg as any).tag === 'h3' ? 14 : 13, fontWeight: (seg as any).tag === 'h3' ? 700 : 400 }}>
-                {renderInline((seg as any).children, [si])}
-              </Tag>
-              <span onClick={() => deleteProse(si)} title="Delete this paragraph" style={{ position: 'absolute', top: 0, right: -4, cursor: 'pointer', color: '#d1d5db', fontSize: 12, fontWeight: 700 }}>&times;</span>
-            </div>
-          )
-        })}
+      <div className="bt-fed-canvas">
+        <div className="bt-fed-page">
+          {mode === 'preview'
+            ? <div dangerouslySetInnerHTML={{ __html: renderPreview(body, sample) }} />
+            : model.map((seg, si) => {
+              if (seg.type === 'gap') return null
+              if (seg.type === 'sig') {
+                const v = /\{\{sig\.([a-zA-Z0-9_]+)\}\}/.exec((seg as any).raw)
+                return <div key={mountKey + '-' + si} className="bt-fed-sig">[ {v ? (SIG_LABELS[v[1]] || v[1]) : 'Signature'} ]</div>
+              }
+              if (seg.type === 'struct') {
+                return (
+                  <div key={mountKey + '-' + si} className="bt-fed-fixed" contentEditable={false}>
+                    <span className="tag">{structLabel(seg)}</span>
+                    <div className="inner" style={{ pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: renderPreview((seg as any).raw, sample) }} />
+                  </div>
+                )
+              }
+              const Tag = ((seg as any).tag === 'h3' ? 'h3' : 'p') as any
+              return (
+                <div key={mountKey + '-' + si} className="bt-fed-blk">
+                  <Tag style={{ margin: (seg as any).tag === 'h3' ? '20px 0 6px' : '0 0 12px' }}>{renderInline((seg as any).children, [si])}</Tag>
+                  <span className="bt-fed-del" onClick={() => deleteProse(si)} title="Delete this paragraph">&times;</span>
+                </div>
+              )
+            })}
+        </div>
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>Blue tags are auto-filled fields. Orange blocks are optional sections. Grey blocks are fixed layout you can edit under Advanced. The letterhead and print layout are added automatically.</div>
+
+      <div className="bt-fed-foot">
+        <span className="hint">Highlighted words fill in automatically for each person. The letterhead, margins, and signatures are added when the letter is generated.</span>
+        <button className="bt-fed-adv" onClick={() => setAdvanced(true)}>Edit source</button>
+      </div>
     </div>
   )
 }
-
 
 function TemplatesPage({ showToast }: { showToast: (m: string, t?: 'ok' | 'fail') => void }) {
   const [list, setList] = useState<any[]>([])
@@ -3032,17 +3054,7 @@ function TemplatesPage({ showToast }: { showToast: (m: string, t?: 'ok' | 'fail'
                 </div>
 
 
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <div style={{ flex: '1 1 320px', minWidth: 280 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Template body</div>
-                    <FriendlyLetterEditor body={body} onChange={setBody} sample={TPL_SAMPLE} renderPreview={tplRenderPreview} />
-                  </div>
-                  <div style={{ flex: '1 1 320px', minWidth: 280 }}>
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live preview (sample data)</div>
-                    <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 16, minHeight: 340, background: '#fff', color: '#1a1a1a', fontSize: 12, lineHeight: 1.7, overflow: 'auto' }}
-                      dangerouslySetInnerHTML={{ __html: tplRenderPreview(body, TPL_SAMPLE) }} />
-                  </div>
-                </div>
+                <FriendlyLetterEditor body={body} onChange={setBody} sample={TPL_SAMPLE} renderPreview={tplRenderPreview} />
 
                 {/* Version history */}
                 <div style={{ marginTop: 16 }}>
