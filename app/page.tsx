@@ -3035,17 +3035,17 @@ function TemplatesPage({ showToast }: { showToast: (m: string, t?: 'ok' | 'fail'
       {!sel ? (
         loading ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 12 }}>Loading...</div> :
           visible.length === 0 ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 24, textAlign: 'center', border: '1px dashed var(--border)', borderRadius: 12 }}>No letters yet. The built-in letters appear here once seeded.</div> :
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginTop: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16, marginTop: 18 }}>
               {visible.map(t => (
                 <div key={t.id} onClick={() => !t.deleted_at && open(t.id)}
-                  style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, cursor: t.deleted_at ? 'default' : 'pointer', background: 'var(--bg2)', opacity: t.deleted_at ? 0.55 : 1, transition: 'border-color .12s' }}
-                  onMouseEnter={e => { if (!t.deleted_at) (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--text3)' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)' }}>
+                  style={{ padding: '18px 20px', border: '1px solid var(--border2)', borderRadius: 12, cursor: t.deleted_at ? 'default' : 'pointer', background: 'var(--bg2)', opacity: t.deleted_at ? 0.55 : 1, transition: 'border-color .12s, background .12s', boxShadow: '0 1px 2px rgba(0,0,0,0.25)', minHeight: 90, display: 'flex', flexDirection: 'column' }}
+                  onMouseEnter={e => { if (!t.deleted_at) { const el = e.currentTarget as HTMLDivElement; el.style.borderColor = 'var(--text2)'; el.style.background = 'var(--bg3)' } }}
+                  onMouseLeave={e => { const el = e.currentTarget as HTMLDivElement; el.style.borderColor = 'var(--border2)'; el.style.background = 'var(--bg2)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                     <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{t.name}</div>
                     {t.is_one_time ? <span style={badgeStyle('#0d9488')}>One-time</span> : null}
                   </div>
-                  <div style={{ fontSize: 12.5, color: 'var(--text3)', marginTop: 6, lineHeight: 1.5 }}>{TPL_DESC[t.key] || 'Custom document.'}</div>
+                  <div style={{ fontSize: 13, color: 'var(--text2)', marginTop: 7, lineHeight: 1.55 }}>{TPL_DESC[t.key] || 'Custom document.'}</div>
                   {t.deleted_at ? <button className="btn btn-sm" style={{ marginTop: 10 }} disabled={busy} onClick={(e) => { e.stopPropagation(); restore(t.id) }}>Restore</button> : null}
                 </div>
               ))}
