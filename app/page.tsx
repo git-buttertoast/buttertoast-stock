@@ -1,6 +1,6 @@
 'use client'
 export const dynamic = 'force-dynamic'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { DEPT_DISPLAY, DOC_TYPE_LABELS, DEVICE_DEPRECIATION_DEFAULTS, depreciatedValue } from '@/lib/types'
 import type {
@@ -2103,9 +2103,7 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   <div style={{ flex: '1 1 320px', minWidth: 280 }}>
                     <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Body for this employee</div>
-                    <textarea className="inp" value={editBody} onChange={e => setEditBody(e.target.value)} spellCheck={false}
-                      style={{ width: '100%', minHeight: 340, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 12, lineHeight: 1.5, resize: 'vertical' }} />
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Letterhead, margins, and signatures are added automatically on save.</div>
+                    <FriendlyLetterEditor body={editBody} onChange={setEditBody} sample={review.data} renderPreview={tplRenderPreview} />
                   </div>
                   <div style={{ flex: '1 1 320px', minWidth: 280 }}>
                     <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live preview</div>
@@ -2570,10 +2568,17 @@ const TPL_SIG_OPTIONS: { label: string; token: string }[] = [
 ]
 const TPL_IF_KEYS = TPL_FIELD_OPTIONS.map(o => ({ label: o.label, key: o.token.replace(/\{\{[fdm]\./, '').replace(/\}\}/, '') }))
 const TPL_SAMPLE: Record<string, any> = {
-  employee_name: 'Aditi Sharma', role_title: 'Content Designer', department: 'Design',
+  employee_name: 'Aditi Sharma', first_name: 'Aditi', role_title: 'Content Designer', department: 'Design',
   reports_to_name: 'Aakash Rathi', employee_address: '12 MG Road, Ahmedabad, Gujarat',
+  company_address: 'Office No. 502, Fifth Floor, Trinity, Thaltej, Ahmedabad, Gujarat - 380059', gst: '24AEPPR9510K1ZZ',
   joining_date: '2026-04-01', effective_date: '2026-07-04', probation_end_date: '2026-07-01',
-  internship_end_date: '2026-10-01', annual_ctc: 600000, monthly_ctc: 50000, stipend: 15000,
+  internship_end_date: '2026-10-01', internship_end_display: '2026-10-01', last_working_date: '2026-06-30',
+  internship_months: '6', notes: 'A pleasure to work with.',
+  annual_ctc: 600000, monthly_ctc: 50000, appointment_annual: 600000, appointment_monthly: 50000,
+  stipend: 15000, rate: 50000, rate_type: 'monthly_retainer', rate_suffix: '/ Month',
+  pron_sub: 'they', pron_obj: 'them', pron_pos: 'their', pron_sub_cap: 'They', pron_pos_cap: 'Their',
+  is_exit: true, not_exit: false, has_monthly: true, has_appt_monthly: true, has_stipend: true,
+  no_stipend: false, no_probation_end: false, no_notes: false,
 }
 function tplFmtDate(d: string) { if (!d) return '--'; try { return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) } catch { return d } }
 function tplFmtMoney(n: any) { if (n === null || n === undefined || n === '') return '--'; const x = typeof n === 'number' ? n : parseFloat(String(n).replace(/[^0-9.]/g, '')); return isNaN(x) ? '--' : new Intl.NumberFormat('en-IN').format(x) }
@@ -2599,6 +2604,293 @@ async function tplApi(payload: any) {
   if (!r.ok || d.error) throw new Error(d.error || 'Request failed')
   return d
 }
+
+// ============================================================================
+// Friendly letter editor. The parsed model is the single source of truth; text
+// is edited in uncontrolled single-run fields (no cursor jumps), and fields /
+// signatures / optional blocks are atomic widgets that can be inserted, moved,
+// or deleted whole but never broken. An Advanced (source) toggle is always
+// available. Any block the user does not touch is written back exactly.
+// ============================================================================
+
+// ---- model types ----
+type Inline =
+  | { t: 'text'; v: string }
+  | { t: 'chip'; kind: string; key: string }
+  | { t: 'cond'; key: string; children: Inline[] }
+  | { t: 'el'; tag: string; openRaw: string; selfClose: boolean; children: Inline[] }
+type Seg =
+  | { type: 'prose'; tag: string; openRaw: string; children: Inline[] }
+  | { type: 'struct'; tag: string; raw: string }
+  | { type: 'sig'; raw: string }
+  | { type: 'gap'; raw: string }
+
+// ---- converter (proven lossless on all 12 letters) ----
+function matchElement(s: string, i: number): number {
+  const open = /^<([a-zA-Z0-9]+)([^>]*?)(\/?)>/.exec(s.slice(i)); if (!open) return -1
+  const tag = open[1], selfClose = open[3] === '/'; const afterOpen = i + open[0].length
+  if (selfClose) return afterOpen
+  let depth = 1, j = afterOpen
+  const openRe = new RegExp('<' + tag + '(?:\\s[^>]*)?>', 'g'), closeRe = new RegExp('</' + tag + '>', 'g')
+  while (depth > 0) {
+    closeRe.lastIndex = j; const c = closeRe.exec(s); if (!c) return -1
+    openRe.lastIndex = j; let o = openRe.exec(s), ob = 0
+    while (o && o.index < c.index) { ob++; openRe.lastIndex = o.index + o[0].length; o = openRe.exec(s) }
+    if (ob > 0) { depth += ob; j = c.index + c[0].length; depth-- } else { depth--; j = c.index + c[0].length }
+  }
+  return j
+}
+function splitBlocks(body: string): Seg[] {
+  const segs: Seg[] = []; let i = 0; const n = body.length
+  while (i < n) {
+    const ch = body[i]
+    if (ch === '<') {
+      const end = matchElement(body, i); if (end === -1) throw new Error('unbalanced @' + i)
+      const raw = body.slice(i, end), tag = /^<([a-zA-Z0-9]+)/.exec(raw)![1], prose = (tag === 'p' || tag === 'h3')
+      segs.push(prose ? { type: 'prose', tag, openRaw: '', children: [] } as any : { type: 'struct', tag, raw })
+      if (prose) { const last = segs[segs.length - 1] as any; last.raw = raw }
+      i = end
+    } else if (body.startsWith('{{sig.', i)) {
+      const end = body.indexOf('}}', i) + 2; segs.push({ type: 'sig', raw: body.slice(i, end) }); i = end
+    } else {
+      let j = i; while (j < n && body[j] !== '<' && !body.startsWith('{{sig.', j)) j++
+      segs.push({ type: 'gap', raw: body.slice(i, j) }); i = j
+    }
+  }
+  return segs
+}
+function matchCond(s: string, from: number, key: string): number {
+  const openTok = '{{#' + key + '}}', closeTok = '{{/' + key + '}}'; let depth = 1, i = from
+  while (depth > 0) {
+    const c = s.indexOf(closeTok, i); if (c === -1) throw new Error('no close ' + key)
+    let o = s.indexOf(openTok, i), ob = 0
+    while (o !== -1 && o < c) { ob++; o = s.indexOf(openTok, o + openTok.length) }
+    if (ob > 0) { depth += ob; depth--; i = c + closeTok.length } else { depth--; if (depth === 0) return c; i = c + closeTok.length }
+  }
+  return -1
+}
+function parseInline(s: string): Inline[] {
+  const nodes: Inline[] = []; let i = 0; const n = s.length
+  while (i < n) {
+    if (s.startsWith('{{#', i)) {
+      const m = /^\{\{#([a-zA-Z0-9_]+)\}\}/.exec(s.slice(i))!; const key = m[1]
+      const inner = matchCond(s, i + m[0].length, key)
+      nodes.push({ t: 'cond', key, children: parseInline(s.slice(i + m[0].length, inner)) })
+      i = inner + ('{{/' + key + '}}').length
+    } else if (/^\{\{[fdm]\./.test(s.slice(i))) {
+      const m = /^\{\{([fdm])\.([a-zA-Z0-9_]+)\}\}/.exec(s.slice(i))!
+      nodes.push({ t: 'chip', kind: m[1], key: m[2] }); i += m[0].length
+    } else if (s[i] === '<') {
+      const open = /^<([a-zA-Z0-9]+)([^>]*?)(\/?)>/.exec(s.slice(i))!
+      if (open[3] === '/') { nodes.push({ t: 'el', tag: open[1], openRaw: open[0], selfClose: true, children: [] }); i += open[0].length }
+      else { const end = matchElement(s, i); nodes.push({ t: 'el', tag: open[1], openRaw: open[0], selfClose: false, children: parseInline(s.slice(i + open[0].length, end - ('</' + open[1] + '>').length)) }); i = end }
+    } else {
+      let j = i; while (j < n && s[j] !== '<' && !s.startsWith('{{#', j) && !/^\{\{[fdm]\./.test(s.slice(j))) j++
+      nodes.push({ t: 'text', v: s.slice(i, j) }); i = j
+    }
+  }
+  return nodes
+}
+function serInline(nodes: Inline[]): string {
+  return nodes.map(nd => nd.t === 'text' ? nd.v : nd.t === 'chip' ? '{{' + nd.kind + '.' + nd.key + '}}'
+    : nd.t === 'cond' ? '{{#' + nd.key + '}}' + serInline(nd.children) + '{{/' + nd.key + '}}'
+      : nd.selfClose ? nd.openRaw : nd.openRaw + serInline(nd.children) + '</' + nd.tag + '>').join('')
+}
+function bodyToModel(body: string): Seg[] {
+  return splitBlocks(body).map(seg => {
+    if (seg.type !== 'prose') return seg
+    const open = /^<([a-zA-Z0-9]+)([^>]*?)>/.exec((seg as any).raw)!
+    const raw = (seg as any).raw as string
+    const inner = raw.slice(open[0].length, raw.length - ('</' + open[1] + '>').length)
+    return { type: 'prose', tag: open[1], openRaw: open[0], children: parseInline(inner) }
+  })
+}
+function modelToBody(model: Seg[]): string {
+  return model.map(seg => seg.type !== 'prose' ? (seg as any).raw : (seg as any).openRaw + serInline((seg as any).children) + '</' + (seg as any).tag + '>').join('')
+}
+
+// ---- display decode / safe encode (only the entities these letters use) ----
+const ENT: [string, string][] = [['&ldquo;', '\u201C'], ['&rdquo;', '\u201D'], ['&rsquo;', '\u2019'], ['&lsquo;', '\u2018'], ['&#8377;', '\u20B9'], ['&ndash;', '\u2013'], ['&nbsp;', '\u00A0'], ['&amp;', '&'], ['&lt;', '<'], ['&gt;', '>']]
+function decodeText(v: string) { let s = v; for (const [e, c] of ENT) s = s.split(e).join(c); return s }
+function encodeText(s: string) { return s.split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;') }
+
+// ---- friendly labels ----
+const FIELD_LABELS: Record<string, string> = {
+  employee_name: 'Employee name', first_name: 'First name', role_title: 'Role / title', department: 'Department',
+  reports_to_name: 'Reporting to', employee_address: 'Employee address', company_address: 'Company address', gst: 'GST number',
+  joining_date: 'Joining date', effective_date: 'Effective date', probation_end_date: 'Probation end date',
+  internship_end_date: 'Internship end date', internship_end_display: 'Internship end date', last_working_date: 'Last working day',
+  internship_months: 'Internship duration', annual_ctc: 'Annual CTC', monthly_ctc: 'Monthly CTC',
+  appointment_annual: 'Annual CTC', appointment_monthly: 'Monthly CTC', stipend: 'Monthly stipend', rate: 'Rate',
+  rate_suffix: 'Rate basis', notes: 'Notes', pron_sub: 'Pronoun (they)', pron_obj: 'Pronoun (them)', pron_pos: 'Pronoun (their)',
+  pron_sub_cap: 'Pronoun (They)', pron_pos_cap: 'Pronoun (Their)',
+}
+const COND_LABELS: Record<string, string> = {
+  department: 'Department is set', reports_to_name: 'Reporting line is set', notes: 'Notes are present', no_notes: 'No notes',
+  probation_end_date: 'Probation end date is set', no_probation_end: 'No probation end date', internship_end_date: 'Internship end date is set',
+  internship_months: 'Duration is set', has_monthly: 'Monthly CTC shown', has_appt_monthly: 'Monthly CTC shown',
+  has_stipend: 'Stipend is set', no_stipend: 'No stipend', is_exit: 'If leaving', not_exit: 'If still employed', role_title: 'Role is set',
+}
+const SIG_LABELS: Record<string, string> = {
+  company_both: 'Company (Aakash + Niki)', company_founder: 'Company (Aakash, Founder)', company_proprietor: 'Company (Niki, Proprietor)',
+  company_single: 'Company (chosen signatory)', employee_accept: 'Employee acceptance',
+}
+function titleize(k: string) { return k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) }
+function fieldLabel(key: string) { return FIELD_LABELS[key] || titleize(key) }
+function condLabel(key: string) { return COND_LABELS[key] || titleize(key) }
+function structLabel(seg: Seg): string {
+  const raw = (seg as any).raw as string
+  if ((seg as any).tag === 'table') return 'Details table'
+  if ((seg as any).tag === 'hr') return 'Divider'
+  if (/page-break/.test(raw)) return 'Page break'
+  if (/doc-title/.test(raw)) return 'Document title'
+  if (/class="accept"/.test(raw)) return 'Acceptance / signature area'
+  if (/height:\d/.test(raw)) return 'Spacer'
+  return 'Fixed block'
+}
+
+// ---- editor ----
+export function FriendlyLetterEditor({ body, onChange, sample, renderPreview }: {
+  body: string; onChange: (b: string) => void; sample: Record<string, any>; renderPreview: (body: string, p: any) => string
+}) {
+  const [advanced, setAdvanced] = useState(false)
+  const parseError = useMemo(() => { try { bodyToModel(body); return null } catch (e: any) { return e?.message || 'parse error' } }, [body])
+  const [model, setModel] = useState<Seg[]>(() => { try { return bodyToModel(body) } catch { return [] } })
+  const [mountKey, setMountKey] = useState(0)
+  const modelRef = useRef<Seg[]>(model)
+  const lastEmit = useRef<string>(body)
+  const focusPath = useRef<number[] | null>(null)
+
+  useEffect(() => {
+    if (body !== lastEmit.current) {
+      try { const m = bodyToModel(body); setModel(m); modelRef.current = m; setMountKey(k => k + 1); lastEmit.current = body } catch { /* leave as-is; advanced handles */ }
+    }
+  }, [body])
+
+  const emit = useCallback((m: Seg[]) => { const b = modelToBody(m); lastEmit.current = b; onChange(b) }, [onChange])
+  const commit = useCallback((m: Seg[]) => { modelRef.current = m; setModel(m); setMountKey(k => k + 1); emit(m) }, [emit])
+
+  function cloneModel(): Seg[] { return JSON.parse(JSON.stringify(modelRef.current)) }
+  function nodeAt(m: Seg[], path: number[]): any { let cur: any = (m[path[0]] as any).children; let node: any; for (let k = 1; k < path.length; k++) { node = cur[path[k]]; cur = node && node.children } return node }
+  function parentArr(m: Seg[], path: number[]): any[] { let arr: any = (m[path[0]] as any).children; for (let k = 1; k < path.length - 1; k++) arr = arr[path[k]].children; return arr }
+
+  const onTextInput = (path: number[], el: HTMLElement) => {
+    const node = nodeAt(modelRef.current, path); if (!node || node.t !== 'text') return
+    node.v = encodeText(el.textContent || ''); emit(modelRef.current)
+  }
+  const deleteInline = (path: number[]) => { const m = cloneModel(); const arr = parentArr(m, path); arr.splice(path[path.length - 1], 1); commit(m) }
+  const deleteProse = (segIdx: number) => { const m = cloneModel(); m.splice(segIdx, 1); commit(m) }
+  const addParagraph = (afterSeg: number) => {
+    const m = cloneModel(); const seg: any = { type: 'prose', tag: 'p', openRaw: '<p>', children: [{ t: 'text', v: 'New paragraph.' }] }
+    m.splice(afterSeg + 1, 0, { type: 'gap', raw: '\n\n' } as any, seg); commit(m)
+  }
+  const insertAtFocus = (node: Inline, wrapCond?: boolean) => {
+    const fp = focusPath.current; if (fp == null) return
+    const m = cloneModel(); const seg: any = m[fp[0]]; if (!seg || seg.type !== 'prose') return
+    seg.children.push({ t: 'text', v: ' ' }); seg.children.push(node as any); commit(m)
+  }
+
+  const editableSpan = (path: number[], v: string, style?: React.CSSProperties) => (
+    <span
+      contentEditable suppressContentEditableWarning
+      ref={el => { if (el && el.getAttribute('data-init') !== '1') { el.textContent = decodeText(v); el.setAttribute('data-init', '1') } }}
+      onFocus={() => { focusPath.current = [path[0]] }}
+      onInput={e => onTextInput(path, e.currentTarget)}
+      onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }}
+      onPaste={e => { e.preventDefault(); const t = e.clipboardData.getData('text/plain').replace(/\r?\n/g, ' '); document.execCommand('insertText', false, t) }}
+      style={{ outline: 'none', whiteSpace: 'pre-wrap', ...style }}
+    />
+  )
+
+  const pill = (label: string, onDelete?: () => void, tint?: string) => (
+    <span contentEditable={false} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: tint || '#eef2ff', color: '#3730a3', border: '1px solid #c7d2fe', borderRadius: 6, padding: '1px 6px', margin: '0 2px', fontSize: 11, fontWeight: 600, userSelect: 'none', verticalAlign: 'baseline' }}>
+      {label}
+      {onDelete ? <span onClick={onDelete} style={{ cursor: 'pointer', color: '#9ca3af', fontWeight: 700 }} title="Remove">&times;</span> : null}
+    </span>
+  )
+
+  const renderInline = (nodes: Inline[], base: number[]): React.ReactNode =>
+    nodes.map((nd, idx) => {
+      const path = [...base, idx]
+      if (nd.t === 'text') return <React.Fragment key={idx}>{editableSpan(path, nd.v)}</React.Fragment>
+      if (nd.t === 'chip') return <React.Fragment key={idx}>{pill(fieldLabel(nd.key), () => deleteInline(path))}</React.Fragment>
+      if (nd.t === 'el') {
+        if (nd.selfClose) return nd.tag === 'br' ? <br key={idx} /> : <span key={idx} contentEditable={false} />
+        const inner = renderInline(nd.children, path)
+        if (nd.tag === 'strong') return <strong key={idx}>{inner}</strong>
+        return <span key={idx} style={{ fontStyle: nd.tag === 'span' ? 'italic' : undefined, color: /class="fun"/.test(nd.openRaw) ? '#6b7280' : undefined }}>{inner}</span>
+      }
+      // conditional: labeled tinted block, editable inside, deletable whole
+      return (
+        <span key={idx} contentEditable={false} style={{ display: 'inline', background: '#fff7ed', border: '1px dashed #fdba74', borderRadius: 6, padding: '1px 4px', margin: '0 1px' }}>
+          <span style={{ fontSize: 9, fontWeight: 700, color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.4px', marginRight: 4, userSelect: 'none' }}>{condLabel(nd.key)}</span>
+          <span contentEditable={false}>{renderInline(nd.children, path)}</span>
+          <span onClick={() => deleteInline(path)} style={{ cursor: 'pointer', color: '#9ca3af', fontWeight: 700, marginLeft: 4, fontSize: 11 }} title="Remove optional block">&times;</span>
+        </span>
+      )
+    })
+
+  if (advanced || parseError) {
+    return (
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+          <span style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600 }}>{parseError ? 'Source mode (this letter has custom markup)' : 'Advanced (source) mode'}</span>
+          {!parseError ? <button className="btn btn-sm" onClick={() => setAdvanced(false)}>Back to simple editor</button> : null}
+        </div>
+        <textarea className="inp" value={body} onChange={e => onChange(e.target.value)} spellCheck={false}
+          style={{ width: '100%', minHeight: 340, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 12, lineHeight: 1.5, resize: 'vertical' }} />
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+        <select className="inp" style={{ maxWidth: 170 }} value="" onChange={e => { if (e.target.value) { const m = /\{\{([fdm])\.([a-zA-Z0-9_]+)\}\}/.exec(e.target.value); if (m) insertAtFocus({ t: 'chip', kind: m[1], key: m[2] }) } e.target.value = '' }}>
+          <option value="">Insert field...</option>
+          <option value="{{f.employee_name}}">Employee name</option>
+          <option value="{{f.role_title}}">Role / title</option>
+          <option value="{{d.joining_date}}">Joining date</option>
+          <option value="{{d.effective_date}}">Effective date</option>
+          <option value="{{m.annual_ctc}}">Annual CTC</option>
+          <option value="{{m.stipend}}">Monthly stipend</option>
+        </select>
+        <button className="btn btn-sm" onClick={() => { if (focusPath.current) addParagraph(focusPath.current[0]) }}>+ Paragraph</button>
+        <div style={{ flex: 1 }} />
+        <button className="btn btn-sm" onClick={() => setAdvanced(true)}>Advanced (source)</button>
+      </div>
+
+      <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 14, background: '#fff', color: '#1a1a1a', fontSize: 13, lineHeight: 1.7 }}>
+        {model.map((seg, si) => {
+          if (seg.type === 'gap') return null
+          if (seg.type === 'sig') {
+            const v = /\{\{sig\.([a-zA-Z0-9_]+)\}\}/.exec((seg as any).raw)
+            return <div key={mountKey + '-' + si} style={{ margin: '10px 0' }}>{pill('Signature: ' + (v ? (SIG_LABELS[v[1]] || v[1]) : ''), undefined, '#fee2e2')}</div>
+          }
+          if (seg.type === 'struct') {
+            return (
+              <div key={mountKey + '-' + si} contentEditable={false} style={{ margin: '8px 0', border: '1px solid #e5e7eb', borderRadius: 8, background: '#f9fafb' }}>
+                <div style={{ fontSize: 9, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.4px', padding: '4px 8px', borderBottom: '1px solid #e5e7eb' }}>Protected: {structLabel(seg)} (edit in Advanced)</div>
+                <div style={{ padding: 8, fontSize: 11, opacity: 0.85, pointerEvents: 'none' }} dangerouslySetInnerHTML={{ __html: renderPreview((seg as any).raw, sample) }} />
+              </div>
+            )
+          }
+          const Tag = ((seg as any).tag === 'h3' ? 'h3' : 'p') as any
+          return (
+            <div key={mountKey + '-' + si} style={{ position: 'relative', margin: (seg as any).tag === 'h3' ? '14px 0 6px' : '8px 0' }}>
+              <Tag style={{ margin: 0, fontSize: (seg as any).tag === 'h3' ? 14 : 13, fontWeight: (seg as any).tag === 'h3' ? 700 : 400 }}>
+                {renderInline((seg as any).children, [si])}
+              </Tag>
+              <span onClick={() => deleteProse(si)} title="Delete this paragraph" style={{ position: 'absolute', top: 0, right: -4, cursor: 'pointer', color: '#d1d5db', fontSize: 12, fontWeight: 700 }}>&times;</span>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 6 }}>Blue tags are auto-filled fields. Orange blocks are optional sections. Grey blocks are fixed layout you can edit under Advanced. The letterhead and print layout are added automatically.</div>
+    </div>
+  )
+}
+
 
 function TemplatesPage({ showToast }: { showToast: (m: string, t?: 'ok' | 'fail') => void }) {
   const [list, setList] = useState<any[]>([])
@@ -2739,28 +3031,11 @@ function TemplatesPage({ showToast }: { showToast: (m: string, t?: 'ok' | 'fail'
                   </div>
                 </div>
 
-                {/* Insert controls */}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-                  <select className="inp" style={{ maxWidth: 190 }} value="" onChange={e => { if (e.target.value) insert(e.target.value); e.target.value = '' }}>
-                    <option value="">Insert field...</option>
-                    {TPL_FIELD_OPTIONS.map(o => <option key={o.token} value={o.token}>{o.label}</option>)}
-                  </select>
-                  <select className="inp" style={{ maxWidth: 200 }} value="" onChange={e => { if (e.target.value) insert(e.target.value); e.target.value = '' }}>
-                    <option value="">Insert signature...</option>
-                    {TPL_SIG_OPTIONS.map(o => <option key={o.token} value={o.token}>{o.label}</option>)}
-                  </select>
-                  <select className="inp" style={{ maxWidth: 210 }} value="" onChange={e => { if (e.target.value) insert('{{#' + e.target.value + '}}{{/' + e.target.value + '}}'); e.target.value = '' }}>
-                    <option value="">Insert optional block...</option>
-                    {TPL_IF_KEYS.map(o => <option key={o.key} value={o.key}>Only if {o.label} is set</option>)}
-                  </select>
-                </div>
 
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   <div style={{ flex: '1 1 320px', minWidth: 280 }}>
                     <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Template body</div>
-                    <textarea ref={taRef} className="inp" value={body} onChange={e => setBody(e.target.value)} spellCheck={false}
-                      style={{ width: '100%', minHeight: 340, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 12, lineHeight: 1.5, resize: 'vertical' }} />
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>The letterhead, margins, and print layout are fixed and added automatically. You edit only the body.</div>
+                    <FriendlyLetterEditor body={body} onChange={setBody} sample={TPL_SAMPLE} renderPreview={tplRenderPreview} />
                   </div>
                   <div style={{ flex: '1 1 320px', minWidth: 280 }}>
                     <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live preview (sample data)</div>
