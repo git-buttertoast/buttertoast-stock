@@ -2570,6 +2570,21 @@ const TPL_SAMPLE: Record<string, any> = {
   is_exit: true, not_exit: false, has_monthly: true, has_appt_monthly: true, has_stipend: true,
   no_stipend: false, no_probation_end: false, no_notes: false,
 }
+const TPL_DESC: Record<string, string> = {
+  offer_letter: 'Offer someone a job, with their role, pay, and start date.',
+  appointment_letter: 'The full employment contract, signed when they join.',
+  internship_offer: 'Offer an internship, with stipend and duration.',
+  internship_appointment: 'The internship contract, signed when they join.',
+  freelance_agreement: 'Engage a freelancer or consultant, per project or retainer.',
+  appraisal: 'Confirm a raise or revised pay after a review.',
+  salary_revision: 'Tell someone their salary has changed.',
+  probation_confirmation: 'Confirm someone has passed their probation.',
+  warning_letter: 'A formal warning for a conduct or performance issue.',
+  experience_letter: 'Certify a person\u2019s role and time with the company.',
+  internship_completion: 'Certify that an intern completed their internship.',
+  relieving_letter: 'Confirm someone has been formally relieved when they leave.',
+  device_handover: 'Record a laptop or device handed to an employee.',
+}
 function tplFmtDate(d: string) { if (!d) return '--'; try { return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) } catch { return d } }
 function tplFmtMoney(n: any) { if (n === null || n === undefined || n === '') return '--'; const x = typeof n === 'number' ? n : parseFloat(String(n).replace(/[^0-9.]/g, '')); return isNaN(x) ? '--' : new Intl.NumberFormat('en-IN').format(x) }
 function tplConditionals(s: string, p: any) {
@@ -3017,34 +3032,29 @@ function TemplatesPage({ showToast }: { showToast: (m: string, t?: 'ok' | 'fail'
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
-        {/* List */}
-        <div style={{ flex: '1 1 280px', minWidth: 260, maxWidth: 380 }}>
-          {loading ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 12 }}>Loading...</div> :
-            visible.length === 0 ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 12 }}>No templates yet. The built-in letters appear here once seeded.</div> :
-              visible.map(t => (
+      {!sel ? (
+        loading ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 12 }}>Loading...</div> :
+          visible.length === 0 ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 24, textAlign: 'center', border: '1px dashed var(--border)', borderRadius: 12 }}>No letters yet. The built-in letters appear here once seeded.</div> :
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12, marginTop: 10 }}>
+              {visible.map(t => (
                 <div key={t.id} onClick={() => !t.deleted_at && open(t.id)}
-                  style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, marginBottom: 8, cursor: t.deleted_at ? 'default' : 'pointer', background: sel === t.id ? 'var(--bg3)' : 'var(--bg2)', opacity: t.deleted_at ? 0.6 : 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                    <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{t.name}</div>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {t.is_builtin ? <span style={badgeStyle('#4338ca')}>Built-in</span> : null}
-                      {t.is_one_time ? <span style={badgeStyle('#0d9488')}>One-time</span> : null}
-                    </div>
+                  style={{ padding: 16, border: '1px solid var(--border)', borderRadius: 12, cursor: t.deleted_at ? 'default' : 'pointer', background: 'var(--bg2)', opacity: t.deleted_at ? 0.55 : 1, transition: 'border-color .12s' }}
+                  onMouseEnter={e => { if (!t.deleted_at) (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--text3)' }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{t.name}</div>
+                    {t.is_one_time ? <span style={badgeStyle('#0d9488')}>One-time</span> : null}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>
-                    {t.key} &nbsp;&bull;&nbsp; {t.active_version_number ? `v${t.active_version_number} active` : 'no active version'} &nbsp;&bull;&nbsp; {t.version_count} version{t.version_count === 1 ? '' : 's'}
-                  </div>
-                  {t.deleted_at ? <button className="btn btn-sm" style={{ marginTop: 6 }} disabled={busy} onClick={(e) => { e.stopPropagation(); restore(t.id) }}>Restore</button> : null}
+                  <div style={{ fontSize: 12.5, color: 'var(--text3)', marginTop: 6, lineHeight: 1.5 }}>{TPL_DESC[t.key] || 'Custom document.'}</div>
+                  {t.deleted_at ? <button className="btn btn-sm" style={{ marginTop: 10 }} disabled={busy} onClick={(e) => { e.stopPropagation(); restore(t.id) }}>Restore</button> : null}
                 </div>
               ))}
-        </div>
-
-        {/* Editor */}
-        <div style={{ flex: '2 1 420px', minWidth: 300 }}>
-          {!sel ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 12, border: '1px dashed var(--border)', borderRadius: 10 }}>Select a template on the left to edit it, or create a new document type.</div> :
-            !detail ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 12 }}>Loading template...</div> :
-              <div>
+            </div>
+      ) : !detail ? (
+        <div style={{ color: 'var(--text3)', fontSize: 13, padding: 12 }}>Loading letter...</div>
+      ) : (
+        <div style={{ maxWidth: 900 }}>
+          <button className="btn btn-sm" style={{ marginBottom: 12 }} onClick={() => { setSel(null); setDetail(null); setBody('') }}>&larr; All letters</button>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                   <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>{detail.template.name}</div>
                   <div style={{ display: 'flex', gap: 6 }}>
@@ -3074,9 +3084,8 @@ function TemplatesPage({ showToast }: { showToast: (m: string, t?: 'ok' | 'fail'
                     </div>
                   ))}
                 </div>
-              </div>}
-        </div>
-      </div>
+              </div>
+      )}
 
       {showNew ? (
         <div className="modal-backdrop" onClick={() => setShowNew(false)}>
