@@ -1,6 +1,6 @@
 'use client'
 export const dynamic = 'force-dynamic'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { DEPT_DISPLAY, DOC_TYPE_LABELS, DEVICE_DEPRECIATION_DEFAULTS, depreciatedValue } from '@/lib/types'
 import type {
@@ -52,7 +52,7 @@ let toastId = 0
 export default function StockApp() {
   const [user, setUser] = useState<{ id: string; full_name: string; role: string } | null>(null)
   const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState<'people' | 'onboarding' | 'documents' | 'devices' | 'settings'>('people')
+  const [page, setPage] = useState<'people' | 'onboarding' | 'documents' | 'templates' | 'devices' | 'settings'>('people')
   const [toasts, setToasts] = useState<Toast[]>([])
 
   function showToast(msg: string, type: 'ok' | 'fail' = 'ok') {
@@ -111,6 +111,7 @@ export default function StockApp() {
           <NavBtn active={page === 'people'} onClick={() => setPage('people')} icon={<PeopleIcon />}>People</NavBtn>
           <NavBtn active={page === 'onboarding'} onClick={() => setPage('onboarding')} icon={<OnboardingIcon />}>Onboarding</NavBtn>
           <NavBtn active={page === 'documents'} onClick={() => setPage('documents')} icon={<DocIcon />}>Documents</NavBtn>
+          <NavBtn active={page === 'templates'} onClick={() => setPage('templates')} icon={<TemplateIcon />}>Templates</NavBtn>
           <NavBtn active={page === 'devices'} onClick={() => setPage('devices')} icon={<DeviceIcon />}>Devices</NavBtn>
           <div className="nav-section">Admin</div>
           <NavBtn active={page === 'settings'} onClick={() => setPage('settings')} icon={<SettingsIcon />}>Settings</NavBtn>
@@ -139,6 +140,7 @@ export default function StockApp() {
         {page === 'people' && <PeoplePage user={user} showToast={showToast} />}
         {page === 'onboarding' && <OnboardingPage user={user} showToast={showToast} />}
         {page === 'documents' && <DocumentsPage user={user} showToast={showToast} />}
+        {page === 'templates' && <TemplatesPage showToast={showToast} />}
         {page === 'devices' && <DevicesPage user={user} showToast={showToast} />}
         {page === 'settings' && <SettingsPage showToast={showToast} />}
       </main>
@@ -2437,3 +2439,279 @@ const SettingsIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" c
 const HomeIcon = () => <svg viewBox="0 0 16 16" fill="none"><path d="M2 7l6-5 6 5v7H2V7z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M6 14v-4h4v4" stroke="currentColor" strokeWidth="1.5"/></svg>
 const ScoutIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
 const RosterIcon = () => <svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke="currentColor" strokeWidth="1.5"/><path d="M2 13c0-3.314 2.686-5 6-5s6 1.686 6 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+
+// ── Document Templates (editable master templates) ───────────────────────────
+const TemplateIcon = () => <svg viewBox="0 0 16 16" fill="none"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke="currentColor" strokeWidth="1.5"/><path d="M2.5 6h11M6 6v7.5" stroke="currentColor" strokeWidth="1.5"/></svg>
+
+const TPL_SIG_LABEL: Record<string, string> = {
+  company_both: 'Company (Aakash + Niki)',
+  company_founder: 'Company (Aakash, Founder)',
+  company_proprietor: 'Company (Niki, Proprietor)',
+  employee_accept: 'Employee acceptance',
+}
+const TPL_FIELD_OPTIONS: { label: string; token: string }[] = [
+  { label: 'Employee name', token: '{{f.employee_name}}' },
+  { label: 'Role / title', token: '{{f.role_title}}' },
+  { label: 'Department', token: '{{f.department}}' },
+  { label: 'Reporting to', token: '{{f.reports_to_name}}' },
+  { label: 'Employee address', token: '{{f.employee_address}}' },
+  { label: 'Joining date', token: '{{d.joining_date}}' },
+  { label: 'Effective date', token: '{{d.effective_date}}' },
+  { label: 'Probation end date', token: '{{d.probation_end_date}}' },
+  { label: 'Internship end date', token: '{{d.internship_end_date}}' },
+  { label: 'Annual CTC', token: '{{m.annual_ctc}}' },
+  { label: 'Monthly CTC', token: '{{m.monthly_ctc}}' },
+  { label: 'Monthly stipend', token: '{{m.stipend}}' },
+]
+const TPL_SIG_OPTIONS: { label: string; token: string }[] = [
+  { label: 'Company (Aakash + Niki)', token: '{{sig.company_both}}' },
+  { label: 'Company (Aakash, Founder)', token: '{{sig.company_founder}}' },
+  { label: 'Company (Niki, Proprietor)', token: '{{sig.company_proprietor}}' },
+  { label: 'Employee acceptance', token: '{{sig.employee_accept}}' },
+]
+const TPL_IF_KEYS = TPL_FIELD_OPTIONS.map(o => ({ label: o.label, key: o.token.replace(/\{\{[fdm]\./, '').replace(/\}\}/, '') }))
+const TPL_SAMPLE: Record<string, any> = {
+  employee_name: 'Aditi Sharma', role_title: 'Content Designer', department: 'Design',
+  reports_to_name: 'Aakash Rathi', employee_address: '12 MG Road, Ahmedabad, Gujarat',
+  joining_date: '2026-04-01', effective_date: '2026-07-04', probation_end_date: '2026-07-01',
+  internship_end_date: '2026-10-01', annual_ctc: 600000, monthly_ctc: 50000, stipend: 15000,
+}
+function tplFmtDate(d: string) { if (!d) return '--'; try { return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) } catch { return d } }
+function tplFmtMoney(n: any) { if (n === null || n === undefined || n === '') return '--'; const x = typeof n === 'number' ? n : parseFloat(String(n).replace(/[^0-9.]/g, '')); return isNaN(x) ? '--' : new Intl.NumberFormat('en-IN').format(x) }
+function tplConditionals(s: string, p: any) {
+  const re = /\{\{#([a-zA-Z0-9_]+)\}\}((?:(?!\{\{#)[\s\S])*?)\{\{\/\1\}\}/
+  let g = 0
+  while (re.test(s)) { s = s.replace(re, (_m: string, k: string, inner: string) => { const v = p[k]; return !(v === null || v === undefined || v === '' || v === false) ? inner : '' }); if (++g > 500) break }
+  return s
+}
+function tplRenderPreview(bodyHtml: string, p: any) {
+  let out = String(bodyHtml || '')
+  out = out.replace(/\{\{sig\.([a-zA-Z0-9_]+)\}\}/g, (_m: string, v: string) => `<div style="margin-top:18px;padding:8px 12px;border:1px dashed #E03F2A;border-radius:8px;color:#E03F2A;font-size:11px;font-weight:600;display:inline-block;">Signature block: ${TPL_SIG_LABEL[v] || v}</div>`)
+  out = tplConditionals(out, p)
+  out = out.replace(/\{\{d\.([a-zA-Z0-9_]+)\}\}/g, (_m: string, k: string) => tplFmtDate(p[k]))
+  out = out.replace(/\{\{m\.([a-zA-Z0-9_]+)\}\}/g, (_m: string, k: string) => tplFmtMoney(p[k]))
+  out = out.replace(/\{\{f\.([a-zA-Z0-9_]+)\}\}/g, (_m: string, k: string) => { const v = p[k]; if (v === null || v === undefined || v === '') return '[' + k.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) + ']'; return String(v) })
+  return out
+}
+
+async function tplApi(payload: any) {
+  const r = await fetch('/api/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  const d = await r.json()
+  if (!r.ok || d.error) throw new Error(d.error || 'Request failed')
+  return d
+}
+
+function TemplatesPage({ showToast }: { showToast: (m: string, t?: 'ok' | 'fail') => void }) {
+  const [list, setList] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showDeleted, setShowDeleted] = useState(false)
+  const [sel, setSel] = useState<string | null>(null)
+  const [detail, setDetail] = useState<{ template: any; versions: any[] } | null>(null)
+  const [body, setBody] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [showNew, setShowNew] = useState(false)
+  const [newForm, setNewForm] = useState({ name: '', is_one_time: false })
+  const taRef = useRef<HTMLTextAreaElement>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try { const d = await tplApi({ action: 'list' }); setList(d.templates || []) }
+    catch (e: any) { showToast(e.message || 'Failed to load templates', 'fail') }
+    setLoading(false)
+  }, [showToast])
+  useEffect(() => { load() }, [load])
+
+  async function open(id: string) {
+    setSel(id); setDetail(null); setBody('')
+    try {
+      const d = await tplApi({ action: 'get', id })
+      setDetail(d)
+      const active = (d.versions || []).find((v: any) => v.is_active) || (d.versions || [])[0]
+      setBody(active ? active.body_html : '')
+    } catch (e: any) { showToast(e.message || 'Failed to open template', 'fail') }
+  }
+
+  function insert(token: string) {
+    const ta = taRef.current
+    if (!ta) { setBody(b => b + token); return }
+    const s = ta.selectionStart, e = ta.selectionEnd
+    const nb = body.slice(0, s) + token + body.slice(e)
+    setBody(nb)
+    requestAnimationFrame(() => { ta.focus(); const pos = s + token.length; ta.setSelectionRange(pos, pos) })
+  }
+
+  async function saveVersion() {
+    if (!detail) return
+    const note = window.prompt('Describe what changed in this version (optional):', '') 
+    if (note === null) return // cancelled
+    setBusy(true)
+    try {
+      await tplApi({ action: 'save_version', template_id: detail.template.id, body_html: body, note })
+      showToast('Saved as a new version.')
+      await open(detail.template.id); await load()
+    } catch (e: any) { showToast(e.message || 'Save failed', 'fail') }
+    setBusy(false)
+  }
+
+  async function setActive(vid: string) {
+    if (!detail) return
+    setBusy(true)
+    try { await tplApi({ action: 'set_active', template_id: detail.template.id, version_id: vid }); showToast('Active version updated.'); await open(detail.template.id); await load() }
+    catch (e: any) { showToast(e.message || 'Failed', 'fail') }
+    setBusy(false)
+  }
+
+  async function softDelete(id: string) {
+    if (!window.confirm('Delete this template? It will be hidden but can be restored.')) return
+    setBusy(true)
+    try { await tplApi({ action: 'soft_delete', id }); showToast('Template deleted (recoverable).'); if (sel === id) { setSel(null); setDetail(null) } await load() }
+    catch (e: any) { showToast(e.message || 'Failed', 'fail') }
+    setBusy(false)
+  }
+  async function restore(id: string) {
+    setBusy(true)
+    try { await tplApi({ action: 'restore', id }); showToast('Template restored.'); await load() }
+    catch (e: any) { showToast(e.message || 'Failed', 'fail') }
+    setBusy(false)
+  }
+
+  async function create() {
+    if (!newForm.name.trim()) { showToast('Give the document a name.', 'fail'); return }
+    setBusy(true)
+    try {
+      const d = await tplApi({ action: 'create', name: newForm.name.trim(), is_one_time: newForm.is_one_time })
+      setShowNew(false); setNewForm({ name: '', is_one_time: false })
+      showToast('Document type created.')
+      await load(); await open(d.template_id)
+    } catch (e: any) { showToast(e.message || 'Create failed', 'fail') }
+    setBusy(false)
+  }
+
+  const visible = list.filter(t => showDeleted ? true : !t.deleted_at)
+
+  return (
+    <div style={{ padding: '4px 2px 40px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 6 }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>Document Templates</h2>
+          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>Edit the base content of any letter. Saving always creates a new version; nothing is overwritten.</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label style={{ fontSize: 12, color: 'var(--text3)', display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+            <input type="checkbox" checked={showDeleted} onChange={e => setShowDeleted(e.target.checked)} /> Show deleted
+          </label>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowNew(true)}>+ New document type</button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        {/* List */}
+        <div style={{ flex: '1 1 280px', minWidth: 260, maxWidth: 380 }}>
+          {loading ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 12 }}>Loading...</div> :
+            visible.length === 0 ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 12 }}>No templates yet. The built-in letters appear here once seeded.</div> :
+              visible.map(t => (
+                <div key={t.id} onClick={() => !t.deleted_at && open(t.id)}
+                  style={{ padding: '10px 12px', border: '1px solid var(--border)', borderRadius: 10, marginBottom: 8, cursor: t.deleted_at ? 'default' : 'pointer', background: sel === t.id ? 'var(--bg3)' : 'var(--bg2)', opacity: t.deleted_at ? 0.6 : 1 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text)' }}>{t.name}</div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {t.is_builtin ? <span style={badgeStyle('#4338ca')}>Built-in</span> : null}
+                      {t.is_one_time ? <span style={badgeStyle('#0d9488')}>One-time</span> : null}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3 }}>
+                    {t.key} &nbsp;&bull;&nbsp; {t.active_version_number ? `v${t.active_version_number} active` : 'no active version'} &nbsp;&bull;&nbsp; {t.version_count} version{t.version_count === 1 ? '' : 's'}
+                  </div>
+                  {t.deleted_at ? <button className="btn btn-sm" style={{ marginTop: 6 }} disabled={busy} onClick={(e) => { e.stopPropagation(); restore(t.id) }}>Restore</button> : null}
+                </div>
+              ))}
+        </div>
+
+        {/* Editor */}
+        <div style={{ flex: '2 1 420px', minWidth: 300 }}>
+          {!sel ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 12, border: '1px dashed var(--border)', borderRadius: 10 }}>Select a template on the left to edit it, or create a new document type.</div> :
+            !detail ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 12 }}>Loading template...</div> :
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>{detail.template.name}</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button className="btn btn-sm" disabled={busy} onClick={() => softDelete(detail.template.id)} style={{ color: 'var(--red)', borderColor: 'var(--red)' }}>Delete</button>
+                    <button className="btn btn-primary btn-sm" disabled={busy} onClick={saveVersion}>{busy ? 'Saving...' : 'Save as new version'}</button>
+                  </div>
+                </div>
+
+                {/* Insert controls */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <select className="inp" style={{ maxWidth: 190 }} value="" onChange={e => { if (e.target.value) insert(e.target.value); e.target.value = '' }}>
+                    <option value="">Insert field...</option>
+                    {TPL_FIELD_OPTIONS.map(o => <option key={o.token} value={o.token}>{o.label}</option>)}
+                  </select>
+                  <select className="inp" style={{ maxWidth: 200 }} value="" onChange={e => { if (e.target.value) insert(e.target.value); e.target.value = '' }}>
+                    <option value="">Insert signature...</option>
+                    {TPL_SIG_OPTIONS.map(o => <option key={o.token} value={o.token}>{o.label}</option>)}
+                  </select>
+                  <select className="inp" style={{ maxWidth: 210 }} value="" onChange={e => { if (e.target.value) insert('{{#' + e.target.value + '}}{{/' + e.target.value + '}}'); e.target.value = '' }}>
+                    <option value="">Insert optional block...</option>
+                    {TPL_IF_KEYS.map(o => <option key={o.key} value={o.key}>Only if {o.label} is set</option>)}
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 320px', minWidth: 280 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Template body</div>
+                    <textarea ref={taRef} className="inp" value={body} onChange={e => setBody(e.target.value)} spellCheck={false}
+                      style={{ width: '100%', minHeight: 340, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 12, lineHeight: 1.5, resize: 'vertical' }} />
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>The letterhead, margins, and print layout are fixed and added automatically. You edit only the body.</div>
+                  </div>
+                  <div style={{ flex: '1 1 320px', minWidth: 280 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live preview (sample data)</div>
+                    <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 16, minHeight: 340, background: '#fff', color: '#1a1a1a', fontSize: 12, lineHeight: 1.7, overflow: 'auto' }}
+                      dangerouslySetInnerHTML={{ __html: tplRenderPreview(body, TPL_SAMPLE) }} />
+                  </div>
+                </div>
+
+                {/* Version history */}
+                <div style={{ marginTop: 16 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Version history</div>
+                  {detail.versions.map(v => (
+                    <div key={v.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: 12, color: 'var(--text)' }}>
+                        <strong>v{v.version_number}</strong>
+                        {v.is_active ? <span style={{ ...badgeStyle('#39d353'), marginLeft: 8 }}>Active</span> : null}
+                        {v.note ? <span style={{ color: 'var(--text3)', marginLeft: 8 }}>{v.note}</span> : null}
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, color: 'var(--text3)' }}>{v.created_at ? new Date(v.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</span>
+                        {!v.is_active ? <button className="btn btn-sm" disabled={busy} onClick={() => setActive(v.id)}>Set active</button> : null}
+                        {!v.is_active ? <button className="btn btn-sm" onClick={() => setBody(v.body_html)}>Load</button> : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>}
+        </div>
+      </div>
+
+      {showNew ? (
+        <div className="modal-backdrop" onClick={() => setShowNew(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420, padding: 20 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 12 }}>New document type</div>
+            <div className="field"><label>Name</label><input className="inp" value={newForm.name} onChange={e => setNewForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Promotion Letter" /></div>
+            <label style={{ fontSize: 12, color: 'var(--text3)', display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0 14px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={newForm.is_one_time} onChange={e => setNewForm(f => ({ ...f, is_one_time: e.target.checked }))} />
+              One-time document (regenerating replaces the current copy)
+            </label>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn btn-sm" onClick={() => setShowNew(false)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" disabled={busy} onClick={create}>{busy ? 'Creating...' : 'Create'}</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function badgeStyle(color: string): any {
+  return { fontSize: 10, fontWeight: 700, color, background: color + '18', border: '1px solid ' + color + '40', borderRadius: 6, padding: '1px 6px', whiteSpace: 'nowrap' }
+}
