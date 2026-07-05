@@ -795,6 +795,19 @@ export async function POST(req: NextRequest) {
       employee_address,
     }
 
+    // Derived helper fields for template rendering only. Additive: the code
+    // generators compute these themselves and ignore the p copies, so seeding
+    // or not seeding a template changes nothing about existing output.
+    p.first_name   = String(p.employee_name || '').split(' ')[0]
+    p.pron_sub     = pronoun(p.gender || 'neutral', 'sub')
+    p.pron_obj     = pronoun(p.gender || 'neutral', 'obj')
+    p.pron_pos     = pronoun(p.gender || 'neutral', 'pos')
+    p.pron_sub_cap = p.pron_sub.charAt(0).toUpperCase() + p.pron_sub.slice(1)
+    p.pron_pos_cap = p.pron_pos.charAt(0).toUpperCase() + p.pron_pos.slice(1)
+    p.is_exit      = p.last_working_date ? true : false
+    p.not_exit     = p.last_working_date ? false : true
+    p.internship_end_display = p.internship_end_date || p.effective_date
+
     const generators: Record<string, Function> = {
       offer_letter:              offerLetter,
       internship_offer:          internshipOffer,
