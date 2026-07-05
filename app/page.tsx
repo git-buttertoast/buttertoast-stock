@@ -2544,6 +2544,7 @@ const TPL_SIG_LABEL: Record<string, string> = {
   company_both: 'Company (Aakash + Niki)',
   company_founder: 'Company (Aakash, Founder)',
   company_proprietor: 'Company (Niki, Proprietor)',
+  company_single: 'Company (chosen signatory)',
   employee_accept: 'Employee acceptance',
 }
 const TPL_FIELD_OPTIONS: { label: string; token: string }[] = [
@@ -2564,6 +2565,7 @@ const TPL_SIG_OPTIONS: { label: string; token: string }[] = [
   { label: 'Company (Aakash + Niki)', token: '{{sig.company_both}}' },
   { label: 'Company (Aakash, Founder)', token: '{{sig.company_founder}}' },
   { label: 'Company (Niki, Proprietor)', token: '{{sig.company_proprietor}}' },
+  { label: 'Company (chosen signatory)', token: '{{sig.company_single}}' },
   { label: 'Employee acceptance', token: '{{sig.employee_accept}}' },
 ]
 const TPL_IF_KEYS = TPL_FIELD_OPTIONS.map(o => ({ label: o.label, key: o.token.replace(/\{\{[fdm]\./, '').replace(/\}\}/, '') }))

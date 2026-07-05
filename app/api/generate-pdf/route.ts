@@ -156,6 +156,7 @@ function sigServer(variant: string, p: Record<string,any>): string {
     case 'company_both':       return sigBoth()
     case 'company_founder':    return sigSingle('aakash')
     case 'company_proprietor': return sigSingle('niki')
+    case 'company_single':     return sigSingle(p.signatory || 'aakash')
     case 'employee_accept':    return acceptBlock(p.employee_name || '')
     default:                   return ''
   }
