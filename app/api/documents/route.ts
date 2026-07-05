@@ -39,6 +39,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true }, { headers: CORS })
     }
 
+    if (action === 'update_content') {
+      if (!body.id) return NextResponse.json({ error: 'id is required' }, { status: 400, headers: CORS })
+      const { error } = await supabase.from('employee_documents')
+        .update({ content_html: body.content_html ?? null }).eq('id', body.id)
+      if (error) throw error
+      return NextResponse.json({ ok: true }, { headers: CORS })
+    }
+
     return NextResponse.json({ error: 'Unknown action: ' + action }, { status: 400, headers: CORS })
   } catch (err: any) {
     console.error('documents api error:', err)

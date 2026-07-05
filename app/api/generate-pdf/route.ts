@@ -718,6 +718,18 @@ export async function POST(req: NextRequest) {
       lh_url: sv.lh_url || LH_DEFAULTS.lh_url,
     }
 
+    // Reprint / print a letter that already has a saved body (content_html).
+    // Stateless: wraps the given body in the letterhead shell. No regeneration.
+    if (body.action === 'reprint') {
+      const contentHtml = body.content_html as string
+      if (!contentHtml) return NextResponse.json({ error: 'content_html required' }, { status: 400, headers: CORS_HEADERS })
+      const rp = (body.metadata || {}) as Record<string, any>
+      const ref = generateRef(body.document_type || 'document', rp.employee_name || '', body.document_id || '')
+      const dateStr = fmtDate(rp.effective_date || (body.created_at ? String(body.created_at).slice(0, 10) : ''))
+      const html = shell(contentHtml, settings, ref, dateStr)
+      return NextResponse.json({ html }, { headers: CORS_HEADERS })
+    }
+
     // Load employee data ONLY when we have a profile_id (existing employee).
     // For candidate-stage documents (offer letters in Scout) there is no profile
     // yet, so we rely entirely on the fields passed in the request body.

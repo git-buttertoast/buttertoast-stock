@@ -1546,10 +1546,15 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
   const [typeFilter, setTypeFilter] = useState('')
   const [showGenerate, setShowGenerate] = useState(false)
   const [expRequests, setExpRequests] = useState<any[]>([])
+  const [showDeleted, setShowDeleted] = useState(false)
+  const [docBusy, setDocBusy] = useState<string | null>(null)
+  const [editing, setEditing] = useState<any | null>(null)
+  const [editBody, setEditBody] = useState('')
+  const [editBusy, setEditBusy] = useState(false)
 
   useEffect(() => {
     Promise.all([
-      supabase.from('employee_documents').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
+      supabase.from('employee_documents').select('*').order('created_at', { ascending: false }),
       supabase.from('profiles').select('*, employee_profiles(*)').eq('is_active', true).order('full_name'),
       supabase.from('experience_letter_requests').select('*, profiles(full_name)').eq('status', 'pending'),
     ]).then(([d, e, r]) => {
@@ -1560,7 +1565,50 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
     })
   }, [])
 
+  const reload = async () => {
+    const { data } = await supabase.from('employee_documents').select('*').order('created_at', { ascending: false })
+    setDocs(data || [])
+  }
+  async function docAction(action: string, id: string, extra?: any) {
+    const r = await fetch('/api/documents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, id, ...extra }) })
+    const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || 'Failed'); return d
+  }
+  async function delDoc(id: string) {
+    if (!window.confirm('Delete this letter? It will be hidden but can be restored.')) return
+    setDocBusy(id)
+    try { await docAction('soft_delete', id); await reload(); showToast('Letter deleted (recoverable).') }
+    catch (e: any) { showToast(e.message || 'Delete failed', 'fail') }
+    setDocBusy(null)
+  }
+  async function restoreDoc(id: string) {
+    setDocBusy(id)
+    try { await docAction('restore', id); await reload(); showToast('Letter restored.') }
+    catch (e: any) { showToast(e.message || 'Restore failed', 'fail') }
+    setDocBusy(null)
+  }
+  function openEdit(d: any) { setEditing(d); setEditBody(d.content_html || '') }
+  async function saveEdit() {
+    if (!editing) return
+    setEditBusy(true)
+    try {
+      await docAction('update_content', editing.id, { content_html: editBody })
+      setDocs(prev => prev.map(x => x.id === editing.id ? ({ ...x, content_html: editBody } as any) : x))
+      showToast('Letter updated.'); setEditing(null)
+    } catch (e: any) { showToast(e.message || 'Save failed', 'fail') }
+    setEditBusy(false)
+  }
+  async function printDoc(d: any, html: string) {
+    setDocBusy(d.id)
+    try {
+      const r = await fetch('/api/generate-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reprint', content_html: html, document_type: d.document_type, metadata: d.metadata, document_id: d.id, created_at: d.created_at }) })
+      const data = await r.json(); if (!data.html) throw new Error(data.error || 'Could not render')
+      sessionStorage.setItem('bt_print_html', data.html); sessionStorage.removeItem('bt_drive_failed')
+      window.location.href = '/print'
+    } catch (e: any) { showToast(e.message || 'Print failed', 'fail'); setDocBusy(null) }
+  }
+
   const filtered = docs.filter(d => {
+    if (!showDeleted && (d as any).deleted_at) return false
     if (typeFilter && d.document_type !== typeFilter) return false
     if (search) return (d.label || '').toLowerCase().includes(search.toLowerCase()) || d.document_type.includes(search.toLowerCase())
     return true
@@ -1598,6 +1646,9 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
             <option value="">All types</option>
             {Object.entries(DOC_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
+          <label style={{ fontSize: 12, color: 'var(--text3)', display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', marginLeft: 'auto' }}>
+            <input type="checkbox" checked={showDeleted} onChange={e => setShowDeleted(e.target.checked)} /> Show deleted
+          </label>
         </div>
         {loading ? <div className="empty-state"><div className="spinner" /></div> : filtered.length === 0 ? (
           <div className="empty-state"><div className="empty-state-title">No documents</div></div>
@@ -1610,16 +1661,23 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
                 </thead>
                 <tbody>
                   {filtered.map(d => (
-                    <tr key={d.id} onClick={e => e.stopPropagation()}>
-                      <td style={{ fontWeight: 600, color: 'var(--text)' }}>{d.label || DOC_TYPE_LABELS[d.document_type] || d.document_type}</td>
+                    <tr key={d.id} style={{ opacity: (d as any).deleted_at ? 0.5 : 1 }}>
+                      <td style={{ fontWeight: 600, color: 'var(--text)' }}>{d.label || DOC_TYPE_LABELS[d.document_type] || d.document_type}{(d as any).deleted_at ? <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--text3)', marginLeft: 8, padding: '1px 6px', border: '1px solid var(--border)', borderRadius: 10 }}>deleted</span> : null}</td>
                       <td style={{ fontSize: 11, textTransform: 'capitalize' }}>{d.document_type.replace(/_/g, ' ')}</td>
                       <td>v{d.version}</td>
                       <td><span className={`badge ${d.status === 'signed' ? 'badge-active' : d.status === 'superseded' ? 'badge-exited' : 'badge-onboarding'}`}>{d.status}</span></td>
                       <td>{new Date(d.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
-                      <td onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', gap: 6 }}>
-                          {d.file_url && <a className="btn btn-ghost btn-sm" href={d.file_url} target="_blank" rel="noreferrer">View</a>}
-                          {d.signed_copy_url && <a className="btn btn-ghost btn-sm" href={d.signed_copy_url} target="_blank" rel="noreferrer">Signed</a>}
+                      <td>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {(d as any).deleted_at ? (
+                            <button className="btn btn-ghost btn-sm" disabled={docBusy === d.id} onClick={() => restoreDoc(d.id)}>Restore</button>
+                          ) : (<>
+                            {d.file_url && <a className="btn btn-ghost btn-sm" href={d.file_url} target="_blank" rel="noreferrer">View</a>}
+                            {d.signed_copy_url && <a className="btn btn-ghost btn-sm" href={d.signed_copy_url} target="_blank" rel="noreferrer">Signed</a>}
+                            {(d as any).content_html ? <button className="btn btn-ghost btn-sm" onClick={() => openEdit(d)}>Edit</button> : null}
+                            {(d as any).content_html ? <button className="btn btn-ghost btn-sm" disabled={docBusy === d.id} onClick={() => printDoc(d, (d as any).content_html)}>Print</button> : null}
+                            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} disabled={docBusy === d.id} onClick={() => delDoc(d.id)}>Delete</button>
+                          </>)}
                         </div>
                       </td>
                     </tr>
@@ -1641,6 +1699,28 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
             setShowGenerate(false)
           }}
         />
+      )}
+      {editing && (
+        <div className="modal-backdrop" style={{ zIndex: 300 }}>
+          <div className="modal" style={{ maxWidth: 980 }}>
+            <div className="modal-header">
+              <div>
+                <div className="modal-title">Edit letter</div>
+                <div className="modal-sub">{editing.label || DOC_TYPE_LABELS[editing.document_type] || editing.document_type}. Changes save to this letter.</div>
+              </div>
+              <button className="close-btn" onClick={() => setEditing(null)}>&times;</button>
+            </div>
+            <div className="modal-body">
+              <FriendlyLetterEditor body={editBody} onChange={setEditBody} sample={editing.metadata || {}} renderPreview={tplRenderPreview} />
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" disabled={docBusy === editing.id} onClick={() => printDoc(editing, editBody)}>Print / Download</button>
+              <div style={{ flex: 1 }} />
+              <button className="btn btn-ghost" onClick={() => setEditing(null)}>Close</button>
+              <button className="btn btn-primary" disabled={editBusy} onClick={saveEdit}>{editBusy ? 'Saving...' : 'Save changes'}</button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )
