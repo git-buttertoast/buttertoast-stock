@@ -2750,7 +2750,7 @@ function structLabel(seg: Seg): string {
 }
 
 // ---- editor ----
-export function FriendlyLetterEditor({ body, onChange, sample, renderPreview }: {
+function FriendlyLetterEditor({ body, onChange, sample, renderPreview }: {
   body: string; onChange: (b: string) => void; sample: Record<string, any>; renderPreview: (body: string, p: any) => string
 }) {
   const [advanced, setAdvanced] = useState(false)
