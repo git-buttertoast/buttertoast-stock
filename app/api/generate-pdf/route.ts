@@ -223,7 +223,7 @@ function offerLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   <tr><td>Place of work</td><td>${s.company_address}</td></tr>
 </table>
 
-<p>This is a warm summary, not the rulebook. The full and binding terms of your employment &mdash; your duties, compensation, confidentiality and intellectual-property obligations, notice period, and everything else &mdash; are set out in your <strong>Appointment Letter (Contract of Employment)</strong>, which accompanies this offer. Please read it carefully; by signing it you accept those terms in full.</p>
+<p>This is a warm summary, not the rulebook. The full and binding terms of your employment (your duties, compensation, confidentiality and intellectual-property obligations, notice period, and everything else) are set out in your <strong>Appointment Letter (Contract of Employment)</strong>, which accompanies this offer. Please read it carefully; by signing it you accept those terms in full.</p>
 
 <p>This offer is conditional on the satisfactory completion of our standard onboarding checks (background and reference verification, confirmation of your right to work in India, and the qualifications and information you have shared with us). We may withdraw this offer if any of these are not met, or if any information provided to us proves to be materially incorrect.</p>
 
@@ -247,7 +247,7 @@ function appointmentLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   const content = `
 <p style="margin-top:18px;">Dear <strong>${p.employee_name}</strong>,</p>
 
-<p><strong style="font-size:14px;">Welcome to Butter Toast &mdash; we are so glad you said yes.</strong></p>
+<p><strong style="font-size:14px;">Welcome to Butter Toast. We are so glad you said yes.</strong></p>
 
 <p>This is the part where it becomes real. Below is everything you need to accept your appointment and step into your first few days with us. The formal Contract of Employment follows on the next page; this page is just us, telling you we are happy you are here.</p>
 
@@ -255,7 +255,7 @@ function appointmentLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
 <p>The full and binding terms of your employment are set out in the Contract of Employment that follows. Please read it carefully, then sign and return it (along with your offer letter) to confirm your acceptance. We would love to receive your signed acceptance within <strong>seven (7) days</strong>.</p>
 
 <h3>What&rsquo;s to come</h3>
-<p>Once you have accepted, our People team will reach out to walk you through onboarding &mdash; paperwork, your workspace and devices, the people you will work with, and how we do things around here. Your first day is ${fmtDate(p.joining_date)}. Come curious; we will take care of the rest.</p>
+<p>Once you have accepted, our People team will reach out to walk you through onboarding: paperwork, your workspace and devices, the people you will work with, and how we do things around here. Your first day is ${fmtDate(p.joining_date)}. Come curious; we will take care of the rest.</p>
 
 <p>If anything at all is unclear before you sign, just ask us. We would rather you start fully comfortable than quietly unsure.</p>
 
@@ -266,7 +266,7 @@ function appointmentLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
 <div style="page-break-after:always;"></div>
 
 <div style="height:14mm;"></div>
-<div class="doc-title">Appointment Letter &mdash; Contract of Employment</div>
+<div class="doc-title">Appointment Letter (Contract of Employment)</div>
 
 <p>This Contract of Employment (the &ldquo;Agreement&rdquo;) is made between <strong>HATCHX INDIA</strong>, a proprietorship operating the brand <strong>Butter Toast</strong>, having its office at ${s.company_address}, GSTIN ${s.gst} (the &ldquo;Company&rdquo;), and:</p>
 
@@ -310,7 +310,7 @@ function appointmentLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
 
 <h3>10. Conflict of Interest, Outside Work, and Prior Obligations</h3>
 <p>You confirm that you are free to take up this employment and are not bound by any agreement (such as a non-compete or confidentiality obligation to a former employer) that would prevent you from performing your duties here, and that you will not use or disclose any third party's confidential information in the course of your work.</p>
-<p>Butter Toast is a creative workplace, and we do not seek to own your every waking hour. You are free to take on outside creative work, <strong>provided that</strong> it does not: compete with the Company's business; involve the Company's clients or prospective clients; use the Company's time, equipment, resources, or confidential information; or create a conflict of interest with your duties to the Company. What we do not permit is moonlighting &mdash; that is, parallel or undisclosed employment or engagement that competes with us, draws on our resources, or interferes with your work here. If you are ever unsure whether an outside engagement is acceptable, ask us first; we will be reasonable.</p>
+<p>Butter Toast is a creative workplace, and we do not seek to own your every waking hour. You are free to take on outside creative work, <strong>provided that</strong> it does not: compete with the Company's business; involve the Company's clients or prospective clients; use the Company's time, equipment, resources, or confidential information; or create a conflict of interest with your duties to the Company. What we do not permit is moonlighting, that is, parallel or undisclosed employment or engagement that competes with us, draws on our resources, or interferes with your work here. If you are ever unsure whether an outside engagement is acceptable, ask us first; we will be reasonable.</p>
 
 <h3>11. Termination and Notice</h3>
 <p>After confirmation, either Party may terminate this Agreement by giving <strong>two (2) months' written notice</strong>, or payment of basic salary in lieu of the notice period. The Company may, at its discretion, reduce or waive part of the notice period. Where the Company shortens your notice period, you will, in any event, be entitled to a minimum of <strong>fifteen (15) days'</strong> compensation (calculated on basic salary) as a guaranteed floor. During probation, the notice period is as stated in your offer or as per Company policy, and is shorter. Nothing in this clause limits the Company's right to terminate immediately for misconduct under Clause 9.</p>
@@ -328,7 +328,7 @@ function appointmentLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
 
 <p><strong>13.3 Non-Disclosure and Non-Use.</strong> During your employment and at all times afterwards, you will: (a) keep all Confidential Information strictly confidential; (b) use it solely for the proper performance of your duties for the Company, and for no other purpose; (c) not disclose it to any person inside or outside the Company except those who need it for the Company's business and are themselves bound to keep it confidential; and (d) take reasonable care to protect it from unauthorised access, copying, or loss. These obligations survive the end of your employment for as long as the information remains confidential.</p>
 
-<p><strong>13.4 Ownership and Assignment of Work Product.</strong> All work product, designs, creative output, artwork, copy, code, writing, concepts, inventions, improvements, and other materials that you create, conceive, develop, or contribute to (whether alone or with others) in the course of your employment, or using the Company's time, equipment, resources, or Confidential Information (together, &ldquo;Work Product&rdquo;), belong exclusively to the Company. To the fullest extent permitted by law, you hereby irrevocably assign to the Company all present and future intellectual-property rights in the Work Product worldwide &mdash; including copyright, design rights, database rights, trademarks, and rights in any inventions &mdash; and, where permitted by law, you waive any moral rights in the Work Product. Insofar as any such rights do not vest in the Company automatically, you hold them on trust for the Company until assigned.</p>
+<p><strong>13.4 Ownership and Assignment of Work Product.</strong> All work product, designs, creative output, artwork, copy, code, writing, concepts, inventions, improvements, and other materials that you create, conceive, develop, or contribute to (whether alone or with others) in the course of your employment, or using the Company's time, equipment, resources, or Confidential Information (together, &ldquo;Work Product&rdquo;), belong exclusively to the Company. To the fullest extent permitted by law, you hereby irrevocably assign to the Company all present and future intellectual-property rights in the Work Product worldwide (including copyright, design rights, database rights, trademarks, and rights in any inventions), and, where permitted by law, you waive any moral rights in the Work Product. Insofar as any such rights do not vest in the Company automatically, you hold them on trust for the Company until assigned.</p>
 
 <p><strong>13.5 Disclosure and Further Assurance.</strong> You will promptly and fully disclose to the Company any Work Product (including any invention or original work) created in connection with your employment. At the Company's request and cost, both during and after your employment, you will sign any documents and do any acts reasonably necessary to give the Company full ownership of, and to register, perfect, evidence, or defend, its rights in the Work Product. You irrevocably appoint the Company as your attorney to execute such documents on your behalf if you fail to do so within a reasonable time of being asked.</p>
 
@@ -352,7 +352,7 @@ function appointmentLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
 <p><strong>Notices.</strong> Notices under this Agreement must be in writing and sent to the Company at its registered office and to you at your address or email on record.</p>
 <p><strong>Governing law and jurisdiction.</strong> This Agreement is governed by the laws of India, and the courts at Ahmedabad, Gujarat, have exclusive jurisdiction over any dispute arising from it.</p>
 
-<p>We are genuinely glad you have chosen to build your work here. Sign below to confirm that you have read, understood, and accepted these terms &mdash; and then let us get to the good part.</p>
+<p>We are genuinely glad you have chosen to build your work here. Sign below to confirm that you have read, understood, and accepted these terms, and then let us get to the good part.</p>
 
 ${sigBoth()}
 
@@ -370,7 +370,7 @@ function internshipOffer(p: Record<string,any>, s: typeof LH_DEFAULTS) {
 
 <p>Dear <strong>${p.employee_name}</strong>,</p>
 
-<p>Good news &mdash; you're on the menu. We are delighted to offer you an internship at <strong>Butter Toast</strong>, a HATCHX INDIA Brand. Consider this your trial tasting: a chance to learn, to make real work, and to find out what a creative studio actually feels like from the inside.</p>
+<p>Good news: you're on the menu. We are delighted to offer you an internship at <strong>Butter Toast</strong>, a HATCHX INDIA Brand. Consider this your trial tasting: a chance to learn, to make real work, and to find out what a creative studio actually feels like from the inside.</p>
 
 <table class="terms">
   <tr><td>Role</td><td>${p.role_title}</td></tr>
@@ -383,7 +383,7 @@ function internshipOffer(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   <tr><td>Place of work</td><td>${s.company_address}</td></tr>
 </table>
 
-<p>This is the friendly summary. The full terms of your internship &mdash; including confidentiality, ownership of the work you create, conduct, and how either side may end the internship &mdash; are set out in your <strong>Internship Appointment Letter</strong>, which accompanies this offer. Please read it and sign it along with this letter.</p>
+<p>This is the friendly summary. The full terms of your internship (including confidentiality, ownership of the work you create, conduct, and how either side may end the internship) are set out in your <strong>Internship Appointment Letter</strong>, which accompanies this offer. Please read it and sign it along with this letter.</p>
 
 <p>This offer is subject to the satisfactory verification of the information you have shared with us, and your right to work in India.</p>
 
@@ -407,7 +407,7 @@ function internshipAppointment(p: Record<string,any>, s: typeof LH_DEFAULTS) {
 
 <p>This Internship Agreement (the &ldquo;Agreement&rdquo;) is made between <strong>HATCHX INDIA</strong>, a proprietorship operating the brand <strong>Butter Toast</strong>, having its office at ${s.company_address}, GSTIN ${s.gst} (the &ldquo;Company&rdquo;), and <strong>${p.employee_name}</strong> (the &ldquo;Intern&rdquo;).</p>
 
-<p>Welcome to the kitchen. Here is what your trial run looks like &mdash; written plainly, so we both know where we stand.</p>
+<p>Welcome to the kitchen. Here is what your trial run looks like, written plainly, so we both know where we stand.</p>
 
 <table class="terms">
   <tr><td>Role</td><td>${p.role_title}</td></tr>
@@ -428,7 +428,7 @@ function internshipAppointment(p: Record<string,any>, s: typeof LH_DEFAULTS) {
 <p>Your standard working day is <strong>eight (8) hours and thirty (30) minutes, inclusive of breaks</strong>, on the Company's working days, at ${s.company_address} or as otherwise required. By signing, you acknowledge and accept these hours.</p>
 
 <h3>4. Conduct</h3>
-<p>You agree to act professionally, to treat colleagues, clients, and partners with respect, to follow reasonable instructions, and to comply with all Company policies, including those on workplace conduct, anti-harassment, and information security. Serious or repeated misconduct &mdash; including dishonesty, harassment, breach of confidentiality, or misuse of Company property &mdash; may lead to immediate termination of the internship.</p>
+<p>You agree to act professionally, to treat colleagues, clients, and partners with respect, to follow reasonable instructions, and to comply with all Company policies, including those on workplace conduct, anti-harassment, and information security. Serious or repeated misconduct (including dishonesty, harassment, breach of confidentiality, or misuse of Company property) may lead to immediate termination of the internship.</p>
 
 <h3>5. Confidentiality and Intellectual Property</h3>
 <p>During and after your internship, you will keep confidential all non-public information of the Company and its clients, and use it only for the Company's purposes. All work, designs, creative output, code, writing, and other materials you create during the internship, or using the Company's time, resources, or confidential information, belong exclusively to the Company. To the fullest extent permitted by law, you assign to the Company all intellectual-property rights in that work, and will sign any documents reasonably needed to confirm the Company's ownership. These obligations survive the end of your internship. On leaving, you will return or securely delete all Company materials and confidential information in your possession.</p>
@@ -807,6 +807,17 @@ export async function POST(req: NextRequest) {
     p.is_exit      = p.last_working_date ? true : false
     p.not_exit     = p.last_working_date ? false : true
     p.internship_end_display = p.internship_end_date || p.effective_date
+    p.company_address = settings.company_address
+    p.gst = settings.gst
+    p.no_probation_end    = p.probation_end_date ? false : true
+    p.appointment_annual  = num(p.annual_ctc) ?? num(p.annual_confirmed_ctc) ?? num(p.annual_probation_ctc)
+    p.appointment_monthly = toMonthly(p.appointment_annual)
+    p.has_monthly         = num(p.monthly_ctc) ? true : false
+    p.has_appt_monthly    = num(p.appointment_monthly) ? true : false
+    p.has_stipend         = num(p.stipend) ? true : false
+    p.no_stipend          = num(p.stipend) ? false : true
+    p.rate_suffix         = p.rate_type === 'monthly_retainer' ? '/ Month' : p.rate_type === 'daily' ? '/ Day' : '(Project basis)'
+    p.no_notes            = p.notes ? false : true
 
     const generators: Record<string, Function> = {
       offer_letter:              offerLetter,
