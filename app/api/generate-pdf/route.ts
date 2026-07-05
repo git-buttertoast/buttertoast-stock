@@ -817,6 +817,7 @@ export async function POST(req: NextRequest) {
     let html: string
     let renderedBody: string | null = null
     let usedTemplateVersionId: string | null = null
+    let templateBodyRaw: string | null = null
     const { data: tpl } = await supabase
       .from('document_templates')
       .select('id, is_one_time, document_template_versions(id, body_html, is_active)')
@@ -826,6 +827,7 @@ export async function POST(req: NextRequest) {
     const activeVer = ((tpl as any)?.document_template_versions || []).find((v: any) => v.is_active)
     if (tpl && activeVer) {
       const ref = generateRef(document_type, p.employee_name, p.profile_id || p.candidate_id)
+      templateBodyRaw = activeVer.body_html
       renderedBody = renderTemplateBody(activeVer.body_html, p)
       html = shell(renderedBody, settings, ref, fmtDate(p.effective_date))
       usedTemplateVersionId = activeVer.id
@@ -833,6 +835,20 @@ export async function POST(req: NextRequest) {
       html = gen(p, settings)
     } else {
       return NextResponse.json({ error: `Unknown document type: ${document_type}` }, { status: 400, headers: CORS_HEADERS })
+    }
+
+    // ── In-flow review ───────────────────────────────────────────────────────
+    // If HR tweaked the (token) body for this one person, render that edited body
+    // with their data. Only applies to template-backed docs. Then, if this is a
+    // preview call, return without saving. Default path (no preview, no
+    // edited_body) is unchanged.
+    const editedBody = typeof body.edited_body === 'string' ? body.edited_body : null
+    if (editedBody !== null && templateBodyRaw !== null) {
+      renderedBody = renderTemplateBody(editedBody, p)
+      html = shell(renderedBody, settings, generateRef(document_type, p.employee_name, p.profile_id || p.candidate_id), fmtDate(p.effective_date))
+    }
+    if (body.preview === true) {
+      return NextResponse.json({ html, body: templateBodyRaw, editable: templateBodyRaw !== null, data: p }, { headers: CORS_HEADERS })
     }
 
     const b64 = Buffer.from(html, 'utf-8').toString('base64')

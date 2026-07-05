@@ -886,13 +886,35 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
   const [showUpload, setShowUpload] = useState(false)
   const [uploadForm, setUploadForm] = useState({ document_type: 'other' as DocumentType, label: '', file: null as File | null })
   const [expandedTypes, setExpandedTypes] = useState<Record<string, boolean>>({})
+  const [showDeletedDocs, setShowDeletedDocs] = useState(false)
+  const [docBusy, setDocBusy] = useState<string | null>(null)
 
-  useEffect(() => {
-    supabase.from('employee_documents').select('*').eq('profile_id', employee.id).order('created_at', { ascending: false }).then(({ data }) => {
-      setDocs(data || [])
-      setLoading(false)
-    })
+  const reloadDocs = useCallback(async () => {
+    const { data } = await supabase.from('employee_documents').select('*').eq('profile_id', employee.id).order('created_at', { ascending: false })
+    setDocs(data || [])
+    setLoading(false)
   }, [employee.id])
+  useEffect(() => { setLoading(true); reloadDocs() }, [reloadDocs])
+
+  async function delDoc(id: string) {
+    if (!window.confirm('Delete this document? It will be hidden but can be restored.')) return
+    setDocBusy(id)
+    try {
+      const r = await fetch('/api/documents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'soft_delete', id }) })
+      const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || 'Failed')
+      await reloadDocs(); showToast('Document deleted (recoverable).')
+    } catch (e: any) { showToast(e.message || 'Delete failed', 'fail') }
+    setDocBusy(null)
+  }
+  async function restoreDoc(id: string) {
+    setDocBusy(id)
+    try {
+      const r = await fetch('/api/documents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore', id }) })
+      const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || 'Failed')
+      await reloadDocs(); showToast('Document restored.')
+    } catch (e: any) { showToast(e.message || 'Restore failed', 'fail') }
+    setDocBusy(null)
+  }
 
   async function uploadDoc() {
     if (!uploadForm.file) { showToast('Select a file first.', 'fail'); return }
@@ -932,8 +954,7 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
       showToast(driveLink ? 'Uploaded to Drive.' : (folderId ? 'Saved, but Drive upload failed.' : 'Saved. No Drive folder linked for this employee.'), (!driveLink && folderId) ? 'fail' : 'ok')
       setUploading(false)
       setShowUpload(false)
-      const { data } = await supabase.from('employee_documents').select('*').eq('profile_id', employee.id).order('created_at', { ascending: false })
-      setDocs(data || [])
+      await reloadDocs()
     }
     reader.readAsDataURL(uploadForm.file)
   }
@@ -942,7 +963,12 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <div className="section-title">Documents</div>
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowUpload(!showUpload)}>+ Upload</button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <label style={{ fontSize: 11, color: 'var(--text3)', display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
+            <input type="checkbox" checked={showDeletedDocs} onChange={e => setShowDeletedDocs(e.target.checked)} /> Show deleted
+          </label>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowUpload(!showUpload)}>+ Upload</button>
+        </div>
       </div>
       {showUpload && (
         <div className="card" style={{ padding: 16, marginBottom: 16 }}>
@@ -968,12 +994,14 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
       ) : (() => {
         // Split current vs superseded. Superseded are grouped by document_type
         // and shown under a collapsible "Previous versions" section.
-        const current = docs.filter(d => d.is_current !== false)
-        const superseded = docs.filter(d => d.is_current === false)
+        const live = docs.filter(d => !(d as any).deleted_at)
+        const deletedDocs = docs.filter(d => (d as any).deleted_at)
+        const current = live.filter(d => d.is_current !== false)
+        const superseded = live.filter(d => d.is_current === false)
         const supBytype: Record<string, EmployeeDocument[]> = {}
         superseded.forEach(d => { (supBytype[d.document_type] = supBytype[d.document_type] || []).push(d) })
 
-        const docRow = (d: EmployeeDocument, faded?: boolean) => (
+        const docRow = (d: EmployeeDocument, faded?: boolean, deleted?: boolean) => (
           <div key={d.id} className="card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', opacity: faded ? 0.6 : 1 }}>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>
@@ -989,6 +1017,9 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
             <div style={{ display: 'flex', gap: 8 }}>
               {d.file_url && <a className="btn btn-ghost btn-sm" href={d.file_url} target="_blank" rel="noreferrer">View</a>}
               {d.signed_copy_url && <a className="btn btn-ghost btn-sm" href={d.signed_copy_url} target="_blank" rel="noreferrer">Signed copy</a>}
+              {deleted
+                ? <button className="btn btn-ghost btn-sm" disabled={docBusy === d.id} onClick={() => restoreDoc(d.id)}>Restore</button>
+                : <button className="btn btn-ghost btn-sm" disabled={docBusy === d.id} style={{ color: 'var(--red)' }} onClick={() => delDoc(d.id)}>Delete</button>}
             </div>
           </div>
         )
@@ -1009,6 +1040,14 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
                 )}
               </div>
             ))}
+            {showDeletedDocs && deletedDocs.length > 0 && (
+              <div style={{ marginTop: 8 }}>
+                <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', margin: '4px 0 8px' }}>Deleted</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {deletedDocs.map(d => docRow(d, true, true))}
+                </div>
+              </div>
+            )}
           </div>
         )
       })()}
@@ -1510,7 +1549,7 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
 
   useEffect(() => {
     Promise.all([
-      supabase.from('employee_documents').select('*').order('created_at', { ascending: false }),
+      supabase.from('employee_documents').select('*').is('deleted_at', null).order('created_at', { ascending: false }),
       supabase.from('profiles').select('*, employee_profiles(*)').eq('is_active', true).order('full_name'),
       supabase.from('experience_letter_requests').select('*, profiles(full_name)').eq('status', 'pending'),
     ]).then(([d, e, r]) => {
@@ -1651,6 +1690,8 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
   const [supersedePrompt, setSupersedePrompt] = useState<{ existing: any } | null>(null)
   const [supersedeReason, setSupersedeReason] = useState('')
   const [appraisalWarn, setAppraisalWarn] = useState<{ monthsAgo: number; lastDate: string } | null>(null)
+  const [review, setReview] = useState<{ payload: any; html: string; body: string; editable: boolean; data: any } | null>(null)
+  const [editBody, setEditBody] = useState('')
 
   const dt = form.document_type
   const emp = employees.find(e => e.id === form.profile_id)
@@ -1775,26 +1816,40 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     const driveFolderIdMatch = driveFolderUrl ? driveFolderUrl.match(/folders\/([a-zA-Z0-9_-]+)/) : null
     const driveFolderId = driveFolderIdMatch ? driveFolderIdMatch[1] : null
 
+    const payload = { ...form, duties: form.duties || duties, drive_folder_id: driveFolderId,
+      supersede_reason: reason || null,
+      probation_ctc:  form.probation_ctc  ? parseFloat(form.probation_ctc)  : null,
+      confirmed_ctc:  form.confirmed_ctc  ? parseFloat(form.confirmed_ctc)  : null,
+      annual_ctc:     form.annual_ctc     ? parseFloat(form.annual_ctc)     : null,
+      old_ctc:        form.old_ctc        ? parseFloat(form.old_ctc)        : null,
+      new_ctc:        form.new_ctc        ? parseFloat(form.new_ctc)        : null,
+      stipend:        form.stipend        ? parseFloat(form.stipend)        : null,
+      rate:           form.rate           ? parseFloat(form.rate)           : null,
+    }
+    // Step 1: render a preview WITHOUT saving, then open the review screen.
     const res = await fetch('/api/generate-pdf', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, duties: form.duties || duties, drive_folder_id: driveFolderId,
-        supersede_reason: reason || null,
-        probation_ctc:  form.probation_ctc  ? parseFloat(form.probation_ctc)  : null,
-        confirmed_ctc:  form.confirmed_ctc  ? parseFloat(form.confirmed_ctc)  : null,
-        annual_ctc:     form.annual_ctc     ? parseFloat(form.annual_ctc)     : null,
-        old_ctc:        form.old_ctc        ? parseFloat(form.old_ctc)        : null,
-        new_ctc:        form.new_ctc        ? parseFloat(form.new_ctc)        : null,
-        stipend:        form.stipend        ? parseFloat(form.stipend)        : null,
-        rate:           form.rate           ? parseFloat(form.rate)           : null,
-      })
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, preview: true }),
     })
     const data = await res.json()
     setGenerating(false)
     if (!data.html) { showToast(data.error || 'Generation failed.', 'fail'); return }
-    // Store HTML in sessionStorage then navigate -- no popup blocker, no size limit.
-    // A toast here is never seen (we navigate away), so a Drive-save failure is
-    // carried across the navigation and surfaced on the /print page instead.
+    setReview({ payload, html: data.html, body: data.body || '', editable: !!data.editable, data: data.data || {} })
+    setEditBody(data.body || '')
+  }
+
+  // Step 2: commit the reviewed (optionally edited) document, save, and print.
+  async function finalizeAndPrint() {
+    if (!review) return
+    setGenerating(true)
+    const edited = review.editable && editBody !== review.body ? editBody : null
+    const res = await fetch('/api/generate-pdf', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...review.payload, preview: false, edited_body: edited }),
+    })
+    const data = await res.json()
+    setGenerating(false)
+    if (!data.html) { showToast(data.error || 'Save failed.', 'fail'); return }
     sessionStorage.setItem('bt_print_html', data.html)
     if (data.driveStatus === 'failed') sessionStorage.setItem('bt_drive_failed', '1')
     else sessionStorage.removeItem('bt_drive_failed')
@@ -2027,6 +2082,48 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
               <button className="btn btn-ghost" onClick={() => setAppraisalWarn(null)}>Cancel</button>
               <button className="btn btn-primary" disabled={generating} onClick={() => doGenerate('')}>
                 {generating ? <><div className="spinner" /><span>Generating...</span></> : 'Generate Anyway'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {review && (
+        <div className="modal-backdrop" style={{ zIndex: 300 }}>
+          <div className="modal" style={{ maxWidth: review.editable ? 980 : 780 }}>
+            <div className="modal-header">
+              <div>
+                <div className="modal-title">Review document</div>
+                <div className="modal-sub">{review.editable ? 'Tweak the wording for this person if needed, then save and print.' : 'Check the document, then save and print.'}</div>
+              </div>
+              <button className="close-btn" onClick={() => setReview(null)}>&times;</button>
+            </div>
+            <div className="modal-body">
+              <style>{`.bt-doc-preview{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-size:12px;line-height:1.7;color:#1a1a1a}.bt-doc-preview .doc-title{font-size:16px;font-weight:700;text-align:center;margin-bottom:20px}.bt-doc-preview h3{font-size:12px;font-weight:700;margin:18px 0 6px;border-bottom:1px solid #e0e0e0;padding-bottom:4px}.bt-doc-preview p{margin:0 0 10px}.bt-doc-preview ul{margin:6px 0 12px 18px}.bt-doc-preview table.terms{width:100%;border-collapse:collapse;margin:10px 0 14px}.bt-doc-preview table.terms td{padding:6px 10px;border:1px solid #ddd;font-size:11.5px;vertical-align:top}.bt-doc-preview table.terms td:first-child{width:38%;font-weight:600;background:#f8f8f8}`}</style>
+              {review.editable ? (
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 320px', minWidth: 280 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Body for this employee</div>
+                    <textarea className="inp" value={editBody} onChange={e => setEditBody(e.target.value)} spellCheck={false}
+                      style={{ width: '100%', minHeight: 340, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', fontSize: 12, lineHeight: 1.5, resize: 'vertical' }} />
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Letterhead, margins, and signatures are added automatically on save.</div>
+                  </div>
+                  <div style={{ flex: '1 1 320px', minWidth: 280 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Live preview</div>
+                    <div className="bt-doc-preview" style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 16, minHeight: 340, background: '#fff', overflow: 'auto' }}
+                      dangerouslySetInnerHTML={{ __html: tplRenderPreview(editBody, review.data) }} />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <iframe title="Document preview" srcDoc={review.html} style={{ width: '100%', height: 460, border: '1px solid var(--border)', borderRadius: 10, background: '#fff' }} />
+                  <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>This letter is not template-based yet, so it cannot be edited inline. It becomes editable once its template is seeded.</div>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-ghost" onClick={() => setReview(null)} disabled={generating}>Back</button>
+              <button className="btn btn-primary" disabled={generating} onClick={finalizeAndPrint}>
+                {generating ? <><div className="spinner" /><span>Saving...</span></> : 'Save & Print'}
               </button>
             </div>
           </div>
