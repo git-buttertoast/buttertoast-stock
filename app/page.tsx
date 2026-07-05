@@ -1586,14 +1586,21 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
     catch (e: any) { showToast(e.message || 'Restore failed', 'fail') }
     setDocBusy(null)
   }
+  async function deletePrev(id: string) {
+    if (!window.confirm('Delete this previous version? It can be restored under Show deleted.')) return
+    setDocBusy(id)
+    try { await docAction('soft_delete', id); await reload(); showToast('Version deleted (recoverable).') }
+    catch (e: any) { showToast(e.message || 'Delete failed', 'fail') }
+    setDocBusy(null)
+  }
   function openEdit(d: any) { setEditing(d); setEditBody(d.content_html || '') }
   async function saveEdit() {
     if (!editing) return
     setEditBusy(true)
     try {
-      await docAction('update_content', editing.id, { content_html: editBody })
-      setDocs(prev => prev.map(x => x.id === editing.id ? ({ ...x, content_html: editBody } as any) : x))
-      showToast('Letter updated.'); setEditing(null)
+      await docAction('save_version', editing.id, { content_html: editBody })
+      await reload()
+      showToast('Saved. The previous copy is kept as a version.'); setEditing(null)
     } catch (e: any) { showToast(e.message || 'Save failed', 'fail') }
     setEditBusy(false)
   }
@@ -1608,11 +1615,17 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
   }
 
   const filtered = docs.filter(d => {
+    if ((d as any).is_current === false) return false
     if (!showDeleted && (d as any).deleted_at) return false
     if (typeFilter && d.document_type !== typeFilter) return false
     if (search) return (d.label || '').toLowerCase().includes(search.toLowerCase()) || d.document_type.includes(search.toLowerCase())
     return true
   })
+  const editChainId = editing && editing.metadata ? editing.metadata.chain_id : null
+  const prevVersions = (editing && editChainId)
+    ? docs.filter((x: any) => x.id !== editing.id && x.metadata && x.metadata.chain_id === editChainId)
+        .sort((a: any, b: any) => (b.version || 0) - (a.version || 0))
+    : []
 
   return (
     <>
@@ -1712,6 +1725,22 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
             </div>
             <div className="modal-body">
               <FriendlyLetterEditor body={editBody} onChange={setEditBody} sample={editing.metadata || {}} renderPreview={tplRenderPreview} />
+              {prevVersions.length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 11, color: 'var(--text3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Previous versions</div>
+                  {prevVersions.map((pv: any) => (
+                    <div key={pv.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 6, opacity: pv.deleted_at ? 0.5 : 1 }}>
+                      <div style={{ fontSize: 12, color: 'var(--text2)' }}>v{pv.version} &nbsp;&bull;&nbsp; {new Date(pv.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}{pv.deleted_at ? <span style={{ color: 'var(--text3)' }}> &nbsp;&bull;&nbsp; deleted</span> : null}</div>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {pv.content_html && !pv.deleted_at ? <button className="btn btn-ghost btn-sm" disabled={docBusy === pv.id} onClick={() => printDoc(pv, pv.content_html)}>Print</button> : null}
+                        {pv.deleted_at
+                          ? <button className="btn btn-ghost btn-sm" disabled={docBusy === pv.id} onClick={() => restoreDoc(pv.id)}>Restore</button>
+                          : <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }} disabled={docBusy === pv.id} onClick={() => deletePrev(pv.id)}>Delete</button>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="modal-footer">
               <button className="btn btn-ghost" disabled={docBusy === editing.id} onClick={() => printDoc(editing, editBody)}>Print / Download</button>
