@@ -3018,11 +3018,11 @@ function TemplatesPage({ showToast }: { showToast: (m: string, t?: 'ok' | 'fail'
   const visible = list.filter(t => showDeleted ? true : !t.deleted_at)
 
   return (
-    <div style={{ padding: '4px 2px 40px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 6 }}>
+    <>
+      <div className="page-header">
         <div>
-          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: 'var(--text)' }}>Document Templates</h2>
-          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>Edit the base content of any letter. Saving always creates a new version; nothing is overwritten.</div>
+          <div className="page-title">Document Templates</div>
+          <div className="page-sub">Edit the wording of any letter. Every save is kept as a new version, so nothing is ever lost.</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <label style={{ fontSize: 12, color: 'var(--text3)', display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
@@ -3031,11 +3031,12 @@ function TemplatesPage({ showToast }: { showToast: (m: string, t?: 'ok' | 'fail'
           <button className="btn btn-primary btn-sm" onClick={() => setShowNew(true)}>+ New document type</button>
         </div>
       </div>
+      <div className="page-body">
 
       {!sel ? (
         loading ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 12 }}>Loading...</div> :
           visible.length === 0 ? <div style={{ color: 'var(--text3)', fontSize: 13, padding: 24, textAlign: 'center', border: '1px dashed var(--border)', borderRadius: 12 }}>No letters yet. The built-in letters appear here once seeded.</div> :
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16, marginTop: 18 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16, marginTop: 4 }}>
               {visible.map(t => (
                 <div key={t.id} onClick={() => !t.deleted_at && open(t.id)}
                   style={{ padding: '18px 20px', border: '1px solid var(--border2)', borderRadius: 12, cursor: t.deleted_at ? 'default' : 'pointer', background: 'var(--bg2)', opacity: t.deleted_at ? 0.55 : 1, transition: 'border-color .12s, background .12s', boxShadow: '0 1px 2px rgba(0,0,0,0.25)', minHeight: 90, display: 'flex', flexDirection: 'column' }}
@@ -3103,7 +3104,8 @@ function TemplatesPage({ showToast }: { showToast: (m: string, t?: 'ok' | 'fail'
           </div>
         </div>
       ) : null}
-    </div>
+      </div>
+    </>
   )
 }
 
