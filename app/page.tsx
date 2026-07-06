@@ -1551,6 +1551,9 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
   const [editing, setEditing] = useState<any | null>(null)
   const [editBody, setEditBody] = useState('')
   const [editBusy, setEditBusy] = useState(false)
+  const [viewing, setViewing] = useState<any | null>(null)
+  const [viewHtml, setViewHtml] = useState<string | null>(null)
+  const [viewReconstructed, setViewReconstructed] = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -1613,6 +1616,24 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
       window.location.href = '/print'
     } catch (e: any) { showToast(e.message || 'Print failed', 'fail'); setDocBusy(null) }
   }
+  async function openView(d: any) {
+    setViewing(d); setViewHtml(null); setViewReconstructed(false)
+    try {
+      if ((d as any).content_html) {
+        const r = await fetch('/api/generate-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reprint', content_html: (d as any).content_html, document_type: d.document_type, metadata: d.metadata, document_id: d.id, created_at: d.created_at }) })
+        const j = await r.json(); if (!j.html) throw new Error(j.error || 'Could not render')
+        setViewHtml(j.html)
+      } else if (d.metadata) {
+        const r = await fetch('/api/generate-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reconstruct', id: d.id }) })
+        const j = await r.json(); if (!j.html) throw new Error(j.error || 'Could not render')
+        setViewHtml(j.html); setViewReconstructed(true)
+      } else if (d.file_url) {
+        window.open(d.file_url, '_blank'); setViewing(null)
+      } else {
+        throw new Error('This letter has no saved copy to preview.')
+      }
+    } catch (e: any) { showToast(e.message || 'Preview failed', 'fail'); setViewing(null) }
+  }
 
   const filtered = docs.filter(d => {
     if ((d as any).is_current === false) return false
@@ -1674,13 +1695,13 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
                 </thead>
                 <tbody>
                   {filtered.map(d => (
-                    <tr key={d.id} style={{ opacity: (d as any).deleted_at ? 0.5 : 1 }}>
+                    <tr key={d.id} onClick={() => !(d as any).deleted_at && openView(d)} style={{ opacity: (d as any).deleted_at ? 0.5 : 1, cursor: (d as any).deleted_at ? 'default' : 'pointer' }}>
                       <td style={{ fontWeight: 600, color: 'var(--text)' }}>{d.label || DOC_TYPE_LABELS[d.document_type] || d.document_type}{(d as any).deleted_at ? <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--text3)', marginLeft: 8, padding: '1px 6px', border: '1px solid var(--border)', borderRadius: 10 }}>deleted</span> : null}</td>
                       <td style={{ fontSize: 11, textTransform: 'capitalize' }}>{d.document_type.replace(/_/g, ' ')}</td>
                       <td>v{d.version}</td>
                       <td><span className={`badge ${d.status === 'signed' ? 'badge-active' : d.status === 'superseded' ? 'badge-exited' : 'badge-onboarding'}`}>{d.status}</span></td>
                       <td>{new Date(d.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
-                      <td>
+                      <td onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {(d as any).deleted_at ? (
                             <button className="btn btn-ghost btn-sm" disabled={docBusy === d.id} onClick={() => restoreDoc(d.id)}>Restore</button>
@@ -1712,6 +1733,31 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
             setShowGenerate(false)
           }}
         />
+      )}
+      {viewing && (
+        <div className="modal-backdrop" style={{ zIndex: 300 }}>
+          <div className="modal" style={{ maxWidth: 900 }}>
+            <div className="modal-header">
+              <div>
+                <div className="modal-title">{viewing.label || DOC_TYPE_LABELS[viewing.document_type] || viewing.document_type}</div>
+                <div className="modal-sub">{viewReconstructed ? 'Reconstructed from saved details using the current template. This may differ from the letter as originally issued.' : 'Saved letter.'}</div>
+              </div>
+              <button className="close-btn" onClick={() => setViewing(null)}>&times;</button>
+            </div>
+            <div className="modal-body">
+              {viewHtml
+                ? <iframe srcDoc={viewHtml} title="Letter preview" style={{ width: '100%', height: '62vh', border: '1px solid var(--border)', borderRadius: 8, background: '#fff' }} />
+                : <div style={{ padding: 40, textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>Loading preview...</div>}
+            </div>
+            <div className="modal-footer">
+              {(viewing as any).content_html ? <button className="btn btn-ghost" onClick={() => { const dd = viewing; setViewing(null); openEdit(dd) }}>Edit</button> : null}
+              <button className="btn btn-ghost" disabled={!viewHtml} onClick={() => { if (viewHtml) { sessionStorage.setItem('bt_print_html', viewHtml); sessionStorage.removeItem('bt_drive_failed'); window.location.href = '/print' } }}>Print / Download</button>
+              <div style={{ flex: 1 }} />
+              <button className="btn btn-ghost" onClick={() => setViewing(null)}>Close</button>
+              <button className="btn btn-ghost" style={{ color: 'var(--red)' }} disabled={docBusy === viewing.id} onClick={() => { const id = viewing.id; setViewing(null); delDoc(id) }}>Delete</button>
+            </div>
+          </div>
+        </div>
       )}
       {editing && (
         <div className="modal-backdrop" style={{ zIndex: 300 }}>

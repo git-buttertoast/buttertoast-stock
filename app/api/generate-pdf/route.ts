@@ -730,6 +730,57 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ html }, { headers: CORS_HEADERS })
     }
 
+    // Reconstruct a letter that has no saved body (generated before bodies were
+    // stored), from its saved input details (metadata) using the current template
+    // or code generator. Clearly flagged as reconstructed to the caller.
+    if (body.action === 'reconstruct') {
+      const { data: doc } = await supabase.from('employee_documents')
+        .select('metadata, document_type').eq('id', body.id).single()
+      if (!doc) return NextResponse.json({ error: 'Letter not found' }, { status: 404, headers: CORS_HEADERS })
+      const p: Record<string, any> = { ...(doc.metadata || {}) }
+      p.first_name   = String(p.employee_name || '').split(' ')[0]
+      p.pron_sub     = pronoun(p.gender || 'neutral', 'sub')
+      p.pron_obj     = pronoun(p.gender || 'neutral', 'obj')
+      p.pron_pos     = pronoun(p.gender || 'neutral', 'pos')
+      p.pron_sub_cap = p.pron_sub.charAt(0).toUpperCase() + p.pron_sub.slice(1)
+      p.pron_pos_cap = p.pron_pos.charAt(0).toUpperCase() + p.pron_pos.slice(1)
+      p.is_exit      = p.last_working_date ? true : false
+      p.not_exit     = p.last_working_date ? false : true
+      p.internship_end_display = p.internship_end_date || p.effective_date
+      p.company_address = settings.company_address
+      p.gst = settings.gst
+      p.no_probation_end    = p.probation_end_date ? false : true
+      p.appointment_annual  = num(p.annual_ctc) ?? num(p.annual_confirmed_ctc) ?? num(p.annual_probation_ctc)
+      p.appointment_monthly = toMonthly(p.appointment_annual)
+      p.has_monthly         = num(p.monthly_ctc) ? true : false
+      p.has_appt_monthly    = num(p.appointment_monthly) ? true : false
+      p.has_stipend         = num(p.stipend) ? true : false
+      p.no_stipend          = num(p.stipend) ? false : true
+      p.rate_suffix         = p.rate_type === 'monthly_retainer' ? '/ Month' : p.rate_type === 'daily' ? '/ Day' : '(Project basis)'
+      p.no_notes            = p.notes ? false : true
+      const RGEN: Record<string, Function> = {
+        offer_letter: offerLetter, internship_offer: internshipOffer, appointment_letter: appointmentLetter,
+        internship_appointment: internshipAppointment, freelance_agreement: freelanceAgreement, appraisal: appraisalLetter,
+        salary_revision: salaryRevision, probation_confirmation: probationConfirmation, experience_letter: experienceLetter,
+        internship_completion: internshipCompletion, relieving_letter: relievingLetter, warning_letter: warningLetter,
+        device_handover: deviceHandover,
+      }
+      const { data: tpl } = await supabase.from('document_templates')
+        .select('id, document_template_versions(body_html, is_active)')
+        .eq('key', doc.document_type).is('deleted_at', null).maybeSingle()
+      const activeVer = ((tpl as any)?.document_template_versions || []).find((v: any) => v.is_active)
+      let rhtml: string
+      if (tpl && activeVer) {
+        const ref = generateRef(doc.document_type, p.employee_name || '', body.id)
+        rhtml = shell(renderTemplateBody(activeVer.body_html, p), settings, ref, fmtDate(p.effective_date || ''))
+      } else if (RGEN[doc.document_type]) {
+        rhtml = RGEN[doc.document_type](p, settings)
+      } else {
+        return NextResponse.json({ error: 'Cannot reconstruct this document type' }, { status: 400, headers: CORS_HEADERS })
+      }
+      return NextResponse.json({ html: rhtml, reconstructed: true }, { headers: CORS_HEADERS })
+    }
+
     // Load employee data ONLY when we have a profile_id (existing employee).
     // For candidate-stage documents (offer letters in Scout) there is no profile
     // yet, so we rely entirely on the fields passed in the request body.
