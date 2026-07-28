@@ -2917,7 +2917,7 @@ const CSS = `
 .bt-fed-ins{font-size:12px;color:var(--text3);border:1px solid var(--border);background:var(--bg2);border-radius:8px;padding:6px 10px;cursor:pointer}
 .bt-fed-canvas{background:#e9eaed;border-radius:12px;padding:20px 14px;max-height:70vh;overflow:auto}
 .bt-fed-page{max-width:720px;margin:0 auto;background:#fff;color:#202124;box-shadow:0 1px 3px rgba(0,0,0,.14),0 1px 2px rgba(0,0,0,.08);border-radius:2px;padding:clamp(26px,5vw,60px);font-family:Arial,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14.5px;line-height:1.85}
-.bt-fed-page.bt-fed-lh{position:relative;padding:130px 69px 69px 62px;background-image:url('/api/generate-pdf?asset=letterhead');background-repeat:repeat-y;background-position:top center;background-size:100% 1018px;min-height:1018px;box-sizing:border-box}
+.bt-fed-page.bt-fed-lh{position:relative;padding:213px 86px 93px 86px;background-image:url('/api/generate-pdf?asset=letterhead');background-repeat:repeat-y;background-position:top center;background-size:100% 1018px;min-height:1018px;box-sizing:border-box}
 .bt-fed-page.bt-fed-lh > *{position:relative;z-index:1}
 
 .bt-fed-page h3{font-size:15px;font-weight:700;margin:20px 0 6px}
