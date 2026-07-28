@@ -129,11 +129,19 @@ table.sheet > thead { display: table-header-group; }
 table.sheet > tfoot { display: table-footer-group; }
 table.sheet td.lh-cell { padding: 0; border: 0; }
 img.lh-head { display: block; width: 210mm; height: ${LH_HEADER_MM}mm; }
-td.lh-spacer { padding: 0; border: 0; height: ${LH_FOOTER_MM}mm; }
-/* The footer is pinned with a POSITIVE bottom:0 (never a negative offset) and is
-   placed AFTER the table, which keeps it on the page bottom of EVERY page,
-   including the last. tfoot above only reserves the space. */
-img.lh-foot { position: fixed; bottom: 0; left: 0; width: 210mm; height: ${LH_FOOTER_MM}mm; }
+/* ON SCREEN (preview modal, /print page before the dialog) the footer simply
+   flows at the end of the document and the tfoot spacer collapses. Pinning it
+   with position:fixed on screen would stick it to the viewport bottom and land
+   on top of the text, which is what a preview must never do. */
+td.lh-spacer { padding: 0; border: 0; height: 0; }
+img.lh-foot { display: block; width: 210mm; height: ${LH_FOOTER_MM}mm; }
+@media print {
+  /* IN PRINT the tfoot reserves 27mm on every page and the footer is pinned with
+     a POSITIVE bottom:0 (never a negative offset, Chrome clamps those) so it sits
+     on the page bottom of every page including the last. */
+  td.lh-spacer { height: ${LH_FOOTER_MM}mm; }
+  img.lh-foot { position: fixed; bottom: 0; left: 0; }
+}
 td.sheet-body { padding: ${LH_GAP_MM}mm ${settings.right}mm ${LH_GAP_MM}mm ${settings.left}mm; vertical-align: top; border: 0; }
 .content { position: relative; z-index: 1; }
 .meta { font-size: 11px; color: #555; margin-bottom: 18px; line-height: 1.6; }
