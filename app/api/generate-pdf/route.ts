@@ -129,7 +129,11 @@ table.sheet > thead { display: table-header-group; }
 table.sheet > tfoot { display: table-footer-group; }
 table.sheet td.lh-cell { padding: 0; border: 0; }
 img.lh-head { display: block; width: 210mm; height: ${LH_HEADER_MM}mm; }
-img.lh-foot { display: block; width: 210mm; height: ${LH_FOOTER_MM}mm; }
+td.lh-spacer { padding: 0; border: 0; height: ${LH_FOOTER_MM}mm; }
+/* The footer is pinned with a POSITIVE bottom:0 (never a negative offset) and is
+   placed AFTER the table, which keeps it on the page bottom of EVERY page,
+   including the last. tfoot above only reserves the space. */
+img.lh-foot { position: fixed; bottom: 0; left: 0; width: 210mm; height: ${LH_FOOTER_MM}mm; }
 td.sheet-body { padding: ${LH_GAP_MM}mm ${settings.right}mm ${LH_GAP_MM}mm ${settings.left}mm; vertical-align: top; border: 0; }
 .content { position: relative; z-index: 1; }
 .meta { font-size: 11px; color: #555; margin-bottom: 18px; line-height: 1.6; }
@@ -155,11 +159,11 @@ table.terms td:first-child { width: 38%; font-weight: 600; background: #f8f8f8; 
 </style>
 </head><body><table class=\"sheet\">
 <thead><tr><td class=\"lh-cell\"><img class=\"lh-head\" src=\"${LH_HEADER_DATA_URI}\" alt=\"\"/></td></tr></thead>
-<tfoot><tr><td class=\"lh-cell\"><img class=\"lh-foot\" src=\"${LH_FOOTER_DATA_URI}\" alt=\"\"/></td></tr></tfoot>
+<tfoot><tr><td class=\"lh-spacer\"></td></tr></tfoot>
 <tbody><tr><td class=\"sheet-body\"><div class=\"content\">
 <div class="meta">Date: ${dateStr} &nbsp;&nbsp; Ref: ${ref}</div>
 ${content}
-</div></td></tr></tbody></table></body></html>`
+</div></td></tr></tbody></table><img class=\"lh-foot\" src=\"${LH_FOOTER_DATA_URI}\" alt=\"\"/></body></html>`
 }
 
 function sigBoth() {
