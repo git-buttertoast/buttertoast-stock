@@ -307,6 +307,13 @@ function appointmentLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   const dateStr = fmtDate(p.effective_date)
   const annual = num(p.annual_ctc) ?? num(p.annual_confirmed_ctc) ?? num(p.annual_probation_ctc)
   const monthly = toMonthly(annual)
+  // Probation pay and confirmed pay are stated separately whenever they differ.
+  // Where only one figure is known the letter states a single CTC, as before.
+  const probAnnual = num(p.annual_probation_ctc)
+  const confAnnual = num(p.annual_confirmed_ctc) ?? num(p.annual_ctc)
+  const splitPay = probAnnual != null && confAnnual != null && probAnnual !== confAnnual
+  const probMonthly = toMonthly(probAnnual)
+  const confMonthly = toMonthly(confAnnual)
   const content = `
 <p style="margin-top:18px;">Dear <strong>${p.employee_name}</strong>,</p>
 
@@ -357,7 +364,8 @@ function appointmentLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
 <p>The Company may, where it considers it necessary (for example, during an investigation into alleged misconduct), require you to remain away from work on full pay for a reasonable period. This is a precaution, not a penalty, and does not by itself imply any finding against you.</p>
 
 <h3>5. Compensation</h3>
-<p>Your total cost to company (CTC) is <strong>&#8377; ${fmtMoney(annual)} per annum</strong>${monthly ? ` (approximately &#8377; ${fmtMoney(monthly)} per month)` : ''}, payable monthly, subject to deduction of tax at source and any other statutory deductions. Your CTC is inclusive of all components of remuneration. The Company may, in future, restructure the components of your CTC (for example, into a detailed salary breakup) and introduce statutory benefits such as Provident Fund as and when applicable, without reducing your total CTC. Revisions to your compensation, if any, are at the Company's discretion and will be communicated in writing.</p>
+${splitPay ? `<p>During your probation period, your total cost to company (CTC) is <strong>&#8377; ${fmtMoney(probAnnual)} per annum</strong>${probMonthly ? ` (approximately &#8377; ${fmtMoney(probMonthly)} per month)` : ''}. On satisfactory confirmation of your employment, your CTC will be <strong>&#8377; ${fmtMoney(confAnnual)} per annum</strong>${confMonthly ? ` (approximately &#8377; ${fmtMoney(confMonthly)} per month)` : ''}, with effect from the date of confirmation stated in your confirmation letter. Confirmation is not automatic on the expiry of probation; it takes effect only when confirmed in writing.</p>
+<p>Your CTC is payable monthly, subject to deduction of tax at source and any other statutory deductions.` : `<p>Your total cost to company (CTC) is <strong>&#8377; ${fmtMoney(annual)} per annum</strong>${monthly ? ` (approximately &#8377; ${fmtMoney(monthly)} per month)` : ''}, payable monthly, subject to deduction of tax at source and any other statutory deductions.`} Your CTC is inclusive of all components of remuneration. The Company may, in future, restructure the components of your CTC (for example, into a detailed salary breakup) and introduce statutory benefits such as Provident Fund as and when applicable, without reducing your total CTC. Revisions to your compensation, if any, are at the Company's discretion and will be communicated in writing.</p>
 
 <h3>6. Working Hours and Place of Work</h3>
 <p>Your standard working day is <strong>eight (8) hours and thirty (30) minutes, inclusive of breaks</strong>, on the Company's working days. Your normal place of work is ${s.company_address}, though your role may from time to time require work at other locations or remotely. Creative work does not always fit neatly into a clock, and we trust our people; by signing below you acknowledge and accept these standard hours as the basis of your engagement.</p>
@@ -376,7 +384,10 @@ function appointmentLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
 <p>Butter Toast is a creative workplace, and we do not seek to own your every waking hour. You are free to take on outside creative work, <strong>provided that</strong> it does not: compete with the Company's business; involve the Company's clients or prospective clients; use the Company's time, equipment, resources, or confidential information; or create a conflict of interest with your duties to the Company. What we do not permit is moonlighting, that is, parallel or undisclosed employment or engagement that competes with us, draws on our resources, or interferes with your work here. If you are ever unsure whether an outside engagement is acceptable, ask us first; we will be reasonable.</p>
 
 <h3>11. Termination and Notice</h3>
-<p>After confirmation, either Party may terminate this Agreement by giving <strong>two (2) months' written notice</strong>, or payment of basic salary in lieu of the notice period. The Company may, at its discretion, reduce or waive part of the notice period. Where the Company shortens your notice period, you will, in any event, be entitled to a minimum of <strong>fifteen (15) days'</strong> compensation (calculated on basic salary) as a guaranteed floor. During probation, the notice period is as stated in your offer or as per Company policy, and is shorter. Nothing in this clause limits the Company's right to terminate immediately for misconduct under Clause 9.</p>
+<p><strong>Notice by you.</strong> After confirmation, you may terminate this Agreement by giving <strong>two (2) months' written notice</strong>. A shorter notice period requires the Company's prior written agreement, which the Company may give, give in part, or withhold at its discretion.</p>
+<p><strong>Notice by the Company.</strong> After confirmation, the Company may terminate this Agreement by giving <strong>two (2) months' written notice</strong>, <strong>ten (10) days' written notice</strong>, or notice taking effect <strong>immediately</strong>, as it decides, and may make payment of basic salary in lieu of all or part of the notice period. The Company may also require you to serve any part of your notice period, or to remain away from work on full pay during it.</p>
+<p>During probation, the notice period is as stated in your offer or as per Company policy, and is shorter. Nothing in this clause limits the Company's right to terminate immediately for misconduct under Clause 9.</p>
+<p><span class="fun">[For legal review: this clause is deliberately asymmetric, binding the Employee to two months while leaving the Company free to end the engagement immediately. Indian practice, including the Gujarat Shops and Establishments Act, generally expects notice or payment in lieu where an employer ends employment without cause, so immediate termination with no payment may be open to challenge. The previous fifteen-day guaranteed floor has been removed. Please confirm the drafting and whether a minimum payment floor should be restored.]</span></p>
 <p>On termination for any reason, you will promptly return all Company property, devices, documents, and materials, and will hand over your work in an orderly manner.</p>
 
 <h3>12. Non-Solicitation</h3>
@@ -815,6 +826,14 @@ export async function POST(req: NextRequest) {
       p.no_probation_end    = p.probation_end_date ? false : true
       p.appointment_annual  = num(p.annual_ctc) ?? num(p.annual_confirmed_ctc) ?? num(p.annual_probation_ctc)
       p.appointment_monthly = toMonthly(p.appointment_annual)
+      p.probation_annual    = num(p.annual_probation_ctc)
+      p.probation_monthly   = toMonthly(p.probation_annual)
+      p.confirmed_annual    = num(p.annual_confirmed_ctc) ?? num(p.annual_ctc)
+      p.confirmed_monthly   = toMonthly(p.confirmed_annual)
+      p.has_split_pay       = (p.probation_annual != null && p.confirmed_annual != null && p.probation_annual !== p.confirmed_annual)
+      p.no_split_pay        = !p.has_split_pay
+      p.has_probation_monthly = num(p.probation_monthly) ? true : false
+      p.has_confirmed_monthly = num(p.confirmed_monthly) ? true : false
       p.has_monthly         = num(p.monthly_ctc) ? true : false
       p.has_appt_monthly    = num(p.appointment_monthly) ? true : false
       p.has_stipend         = num(p.stipend) ? true : false
@@ -938,6 +957,14 @@ export async function POST(req: NextRequest) {
     p.no_probation_end    = p.probation_end_date ? false : true
     p.appointment_annual  = num(p.annual_ctc) ?? num(p.annual_confirmed_ctc) ?? num(p.annual_probation_ctc)
     p.appointment_monthly = toMonthly(p.appointment_annual)
+    p.probation_annual    = num(p.annual_probation_ctc)
+    p.probation_monthly   = toMonthly(p.probation_annual)
+    p.confirmed_annual    = num(p.annual_confirmed_ctc) ?? num(p.annual_ctc)
+    p.confirmed_monthly   = toMonthly(p.confirmed_annual)
+    p.has_split_pay       = (p.probation_annual != null && p.confirmed_annual != null && p.probation_annual !== p.confirmed_annual)
+    p.no_split_pay        = !p.has_split_pay
+    p.has_probation_monthly = num(p.probation_monthly) ? true : false
+    p.has_confirmed_monthly = num(p.confirmed_monthly) ? true : false
     p.has_monthly         = num(p.monthly_ctc) ? true : false
     p.has_appt_monthly    = num(p.appointment_monthly) ? true : false
     p.has_stipend         = num(p.stipend) ? true : false
