@@ -267,7 +267,20 @@ function renderTemplateBody(body: string, p: Record<string,any>): string {
 function offerLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   const ref = generateRef('offer_letter', p.employee_name, p.profile_id || p.candidate_id)
   const dateStr = fmtDate(p.effective_date)
-  const monthly = toMonthly(num(p.annual_ctc))
+  // Probation pay and confirmed pay are stated separately whenever they differ,
+  // matching the Appointment Letter. Previously this letter rendered annual_ctc
+  // alone, which for a Scout offer resolved to null and printed as "--".
+  const annual = num(p.annual_ctc) ?? num(p.annual_confirmed_ctc) ?? num(p.annual_probation_ctc)
+  const monthly = toMonthly(annual)
+  const probAnnual = num(p.annual_probation_ctc)
+  const confAnnual = num(p.annual_confirmed_ctc) ?? num(p.annual_ctc)
+  const splitPay = probAnnual != null && confAnnual != null && probAnnual !== confAnnual
+  const probMonthly = toMonthly(probAnnual)
+  const confMonthly = toMonthly(confAnnual)
+  const ctcRows = splitPay
+    ? `<tr><td>Annual CTC during probation</td><td>&#8377; ${fmtMoney(probAnnual)} per annum${probMonthly ? ` (approximately &#8377; ${fmtMoney(probMonthly)} per month)` : ''}</td></tr>
+  <tr><td>Annual CTC on confirmation</td><td>&#8377; ${fmtMoney(confAnnual)} per annum${confMonthly ? ` (approximately &#8377; ${fmtMoney(confMonthly)} per month)` : ''}</td></tr>`
+    : `<tr><td>Annual CTC</td><td>&#8377; ${fmtMoney(annual)} per annum${monthly ? ` (approximately &#8377; ${fmtMoney(monthly)} per month)` : ''}</td></tr>`
   const content = `
 <div class="doc-title">Offer of Employment</div>
 
@@ -282,7 +295,7 @@ function offerLetter(p: Record<string,any>, s: typeof LH_DEFAULTS) {
   ${p.department ? `<tr><td>Department</td><td>${p.department}</td></tr>` : ''}
   ${p.reports_to_name ? `<tr><td>Reporting to</td><td>${p.reports_to_name}</td></tr>` : ''}
   <tr><td>Proposed start date</td><td>${fmtDate(p.joining_date)}</td></tr>
-  <tr><td>Annual CTC</td><td>&#8377; ${fmtMoney(num(p.annual_ctc))} per annum${monthly ? ` (approximately &#8377; ${fmtMoney(monthly)} per month)` : ''}</td></tr>
+  ${ctcRows}
   <tr><td>Place of work</td><td>${s.company_address}</td></tr>
 </table>
 
@@ -912,7 +925,8 @@ export async function POST(req: NextRequest) {
     // NOTE: body.monthly_ctc is a legacy alias that actually carries an ANNUAL
     // amount (older Scout payloads). Stock now sends body.annual_ctc. Both are
     // accepted here and treated as annual.
-    const annualBase      = num(body.monthly_ctc)   ?? num(body.annual_ctc)    ?? latestComp
+    const annualBase      = num(body.monthly_ctc)   ?? num(body.annual_ctc)
+                            ?? num(body.probation_ctc) ?? num(body.confirmed_ctc) ?? latestComp
     const annualProbation = num(body.probation_ctc) ?? annualBase
     const annualConfirmed = num(body.confirmed_ctc) ?? null
     const annualOld       = num(body.old_ctc)       ?? previousComp
