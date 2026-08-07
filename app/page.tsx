@@ -9,6 +9,14 @@ import type {
   EmployeeType, DocumentType, EmployeeDevice
 } from '@/lib/types'
 
+// Calendar date in IST. new Date().toISOString() yields the UTC date, which is
+// yesterday between midnight and 5:30am local, so it must not be used for "today".
+// en-CA gives YYYY-MM-DD directly.
+function todayIST(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+}
+
+
 // ── iOS-safe date input (overlay pattern) ──
 function DateInput({ value, onChange, className = 'inp' }: { value: string, onChange: (e: any) => void, className?: string }) {
   const disp = value ? new Date(value + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : ''
@@ -631,7 +639,7 @@ function PersonCompensation({ employee, showToast }: { employee: Employee; showT
   const [records, setRecords] = useState<(EmployeeCompensation | FreelancerRateCard)[]>([])
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
-  const [form, setForm] = useState({ amount: '', frequency: 'annual', effective_from: new Date().toISOString().split('T')[0], notes: '', rate_type: 'monthly_retainer', scope_notes: '' })
+  const [form, setForm] = useState({ amount: '', frequency: 'annual', effective_from: todayIST(), notes: '', rate_type: 'monthly_retainer', scope_notes: '' })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -728,7 +736,7 @@ function PersonCompensation({ employee, showToast }: { employee: Employee; showT
           {(() => {
             // "Current" = the record whose effective range contains today, not simply
             // the newest effective_from (a future-dated raise must not show as current).
-            const today = new Date().toISOString().split('T')[0]
+            const today = todayIST()
             let currentId: string | null = null
             for (const r of records) {
               const startsOk = !r.effective_from || r.effective_from <= today
@@ -1083,9 +1091,9 @@ function PersonDevices({ employee, showToast }: { employee: Employee; showToast:
   const blank = {
     ownership: 'company', device_type: 'laptop', make: '', model: '', serial_number: '',
     imei: '', color: '', specs: '', accessories: '', purchase_value: '', purchase_date: '',
-    date_added: new Date().toISOString().split('T')[0], depreciation_rate: '0.20',
+    date_added: todayIST(), depreciation_rate: '0.20',
     condition_at_handover: 'good', condition_notes: '', status: 'assigned',
-    assigned_date: new Date().toISOString().split('T')[0], notes: '',
+    assigned_date: todayIST(), notes: '',
   }
   const [form, setForm] = useState<Record<string, string>>(blank)
 
@@ -1181,7 +1189,7 @@ function PersonDevices({ employee, showToast }: { employee: Employee; showToast:
 
   // Return to pool: device leaves this holder, becomes unassigned/in-pool.
   async function returnToPool(d: EmployeeDevice) {
-    const today = new Date().toISOString().split('T')[0]
+    const today = todayIST()
     const res = await supabase.from('employee_devices')
       .update({ status: 'unassigned', profile_id: null, returned_date: today }).eq('id', d.id)
     if (res.error) { showToast('Could not return to pool.', 'fail'); return }
@@ -1212,7 +1220,7 @@ function PersonDevices({ employee, showToast }: { employee: Employee; showToast:
         document_type: 'device_handover',
         profile_id: employee.id,
         employee_name: employee.full_name,
-        effective_date: new Date().toISOString().split('T')[0],
+        effective_date: todayIST(),
         signatory: 'aakash',
         drive_folder_id: driveFolderId,
         label: `${d.make || ''} ${d.model || ''}`.trim() || 'Device',
@@ -1390,7 +1398,7 @@ function ReassignModal({ device, fromName, employees, onClose, onDone, showToast
   async function doReassign() {
     if (!toId) { showToast('Select who it is moving to.', 'fail'); return }
     setSaving(true)
-    const today = new Date().toISOString().split('T')[0]
+    const today = todayIST()
     // 1. Record return from old holder (their agreement was valid until this point).
     await supabase.from('device_history').insert({
       device_id: device.id, profile_id: device.profile_id, event: 'returned',
@@ -1813,7 +1821,7 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     document_type: 'appointment_letter' as string,
     label: '',
     signatory: 'aakash',
-    effective_date: new Date().toISOString().split('T')[0],
+    effective_date: todayIST(),
     notes: '',
     gender: 'neutral',
     // offer letter
@@ -2285,7 +2293,7 @@ function AddDeviceModal({ employees, onClose, onAdded, showToast, editDevice }: 
   showToast: (m: string, t?: 'ok' | 'fail') => void
   editDevice?: (EmployeeDevice & { holder?: { full_name: string } | null }) | null
 }) {
-  const today = new Date().toISOString().split('T')[0]
+  const today = todayIST()
   const blank = {
     ownership: 'company', device_type: 'laptop', make: '', model: '', serial_number: '',
     imei: '', color: '', specs: '', accessories: '', purchase_value: '', purchase_date: '',
