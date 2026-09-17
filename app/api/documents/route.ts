@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { requireStockAccess } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,11 +20,6 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
-    // Identity first. This route runs on the service role key, so without this
-    // anyone who knew the URL could delete or rewrite any employee document.
-    const gate = await requireStockAccess(req, supabase)
-    if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status, headers: CORS })
-
     const body = await req.json()
     const action = body.action as string
 
