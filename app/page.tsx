@@ -214,7 +214,10 @@ function PeoplePage({ user, showToast }: { user: { id: string; full_name: string
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase.from('profiles').select('*, employee_profiles(*)').eq('is_active', true).order('full_name')
+    // No is_active filter here. The list already has a status filter that defaults to
+    // 'active', so the default view is unchanged, but choosing 'exited' now actually
+    // shows people instead of an empty list.
+    const { data } = await supabase.from('profiles').select('*, employee_profiles(*)').order('full_name')
     setEmployees((data || []) as Employee[])
     setLoading(false)
   }, [])
@@ -1566,7 +1569,10 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
   useEffect(() => {
     Promise.all([
       supabase.from('employee_documents').select('*').order('created_at', { ascending: false }),
-      supabase.from('profiles').select('*, employee_profiles(*)').eq('is_active', true).order('full_name'),
+      // Experience and relieving letters are by definition for people who have left.
+      // Filtering on is_active made them impossible to generate the moment someone was
+      // offboarded, which is exactly when they are needed.
+      supabase.from('profiles').select('*, employee_profiles(*)').order('full_name'),
       supabase.from('experience_letter_requests').select('*, profiles(full_name)').eq('status', 'pending'),
     ]).then(([d, e, r]) => {
       setDocs(d.data || [])
@@ -2129,7 +2135,11 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
           <div className="field"><label>Employee *</label>
             <select className="inp" value={form.profile_id} onChange={e => setForm(f => ({ ...f, profile_id: e.target.value }))}>
               <option value="">Select employee...</option>
-              {employees.map(e => <option key={e.id} value={e.id}>{e.full_name}</option>)}
+              {employees.map(e => {
+                const st = (e.employee_profiles as EmployeeProfile | null)?.status
+                const past = st && st !== 'active'
+                return <option key={e.id} value={e.id}>{e.full_name}{past ? ' (past employee)' : ''}</option>
+              })}
             </select>
           </div>
           <div className="field"><label>Document Type *</label>
