@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireStockAccess } from '@/lib/apiAuth'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -789,6 +790,11 @@ ${sigSingle(p.signatory)}
 // ── MAIN HANDLER ──────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
+    // Identity first. Generating a letter writes to employee_documents and pushes to
+    // Drive using the service role key, so this must never be open to the internet.
+    const gate = await requireStockAccess(req, supabase)
+    if (!gate.ok) return NextResponse.json({ error: gate.error }, { status: gate.status, headers: CORS_HEADERS })
+
     const body = await req.json()
     const { document_type, profile_id, candidate_id, label, drive_folder_id } = body
 
