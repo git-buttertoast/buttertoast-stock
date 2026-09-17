@@ -2,6 +2,18 @@
 export const dynamic = 'force-dynamic'
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
+
+// Both API routes run on the SERVICE ROLE key. They previously accepted any request
+// from anywhere: Access-Control-Allow-Origin was '*' with no identity check at all,
+// so anyone who knew the URL could soft delete, overwrite or regenerate any employee
+// document, salary letters included. Every call now carries the caller's Supabase
+// session so the route can verify who they are and what access they hold.
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const h: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (session?.access_token) h['Authorization'] = 'Bearer ' + session.access_token
+  return h
+}
 import { DEPT_DISPLAY, DOC_TYPE_LABELS, DEVICE_DEPRECIATION_DEFAULTS, depreciatedValue } from '@/lib/types'
 import type {
   Employee, EmployeeProfile, EmployeeKYC,
@@ -911,7 +923,7 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
     if (!window.confirm('Delete this document? It will be hidden but can be restored.')) return
     setDocBusy(id)
     try {
-      const r = await fetch('/api/documents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'soft_delete', id }) })
+      const r = await fetch('/api/documents', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ action: 'soft_delete', id }) })
       const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || 'Failed')
       await reloadDocs(); showToast('Document deleted (recoverable).')
     } catch (e: any) { showToast(e.message || 'Delete failed', 'fail') }
@@ -920,7 +932,7 @@ function PersonDocuments({ employee, showToast }: { employee: Employee; showToas
   async function restoreDoc(id: string) {
     setDocBusy(id)
     try {
-      const r = await fetch('/api/documents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore', id }) })
+      const r = await fetch('/api/documents', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ action: 'restore', id }) })
       const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || 'Failed')
       await reloadDocs(); showToast('Document restored.')
     } catch (e: any) { showToast(e.message || 'Restore failed', 'fail') }
@@ -1218,7 +1230,7 @@ function PersonDevices({ employee, showToast }: { employee: Employee; showToast:
     // Live depreciated value passed to the agreement.
     const depVal = depreciatedValue(d.purchase_value, d.depreciation_rate, d.date_added)
     const res = await fetch('/api/generate-pdf', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: await authHeaders(),
       body: JSON.stringify({
         document_type: 'device_handover',
         profile_id: employee.id,
@@ -1587,7 +1599,7 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
     setDocs(data || [])
   }
   async function docAction(action: string, id: string, extra?: any) {
-    const r = await fetch('/api/documents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, id, ...extra }) })
+    const r = await fetch('/api/documents', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ action, id, ...extra }) })
     const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || 'Failed'); return d
   }
   async function delDoc(id: string) {
@@ -1624,7 +1636,7 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
   async function printDoc(d: any, html: string) {
     setDocBusy(d.id)
     try {
-      const r = await fetch('/api/generate-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reprint', content_html: html, document_type: d.document_type, metadata: d.metadata, document_id: d.id, created_at: d.created_at }) })
+      const r = await fetch('/api/generate-pdf', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ action: 'reprint', content_html: html, document_type: d.document_type, metadata: d.metadata, document_id: d.id, created_at: d.created_at }) })
       const data = await r.json(); if (!data.html) throw new Error(data.error || 'Could not render')
       sessionStorage.setItem('bt_print_html', data.html); sessionStorage.removeItem('bt_drive_failed')
       window.location.href = '/print'
@@ -1634,11 +1646,11 @@ function DocumentsPage({ user, showToast }: { user: { id: string; full_name: str
     setViewing(d); setViewHtml(null); setViewReconstructed(false)
     try {
       if ((d as any).content_html) {
-        const r = await fetch('/api/generate-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reprint', content_html: (d as any).content_html, document_type: d.document_type, metadata: d.metadata, document_id: d.id, created_at: d.created_at }) })
+        const r = await fetch('/api/generate-pdf', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ action: 'reprint', content_html: (d as any).content_html, document_type: d.document_type, metadata: d.metadata, document_id: d.id, created_at: d.created_at }) })
         const j = await r.json(); if (!j.html) throw new Error(j.error || 'Could not render')
         setViewHtml(j.html)
       } else if (d.metadata) {
-        const r = await fetch('/api/generate-pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'reconstruct', id: d.id }) })
+        const r = await fetch('/api/generate-pdf', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ action: 'reconstruct', id: d.id }) })
         const j = await r.json(); if (!j.html) throw new Error(j.error || 'Could not render')
         setViewHtml(j.html); setViewReconstructed(true)
       } else if (d.file_url) {
@@ -1997,7 +2009,7 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     }
     // Step 1: render a preview WITHOUT saving, then open the review screen.
     const res = await fetch('/api/generate-pdf', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: await authHeaders(),
       body: JSON.stringify({ ...payload, preview: true }),
     })
     const data = await res.json()
@@ -2013,7 +2025,7 @@ function GenerateDocModal({ employees, onClose, showToast, onDone }: {
     setGenerating(true)
     const edited = review.editable && editBody !== review.body ? editBody : null
     const res = await fetch('/api/generate-pdf', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: await authHeaders(),
       body: JSON.stringify({ ...review.payload, preview: false, edited_body: edited }),
     })
     const data = await res.json()
@@ -2777,7 +2789,7 @@ function tplRenderPreview(bodyHtml: string, p: any) {
 }
 
 async function tplApi(payload: any) {
-  const r = await fetch('/api/templates', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  const r = await fetch('/api/templates', { method: 'POST', headers: await authHeaders(), body: JSON.stringify(payload) })
   const d = await r.json()
   if (!r.ok || d.error) throw new Error(d.error || 'Request failed')
   return d
