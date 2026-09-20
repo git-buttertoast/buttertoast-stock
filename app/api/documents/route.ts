@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { resolveAccess } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,6 +21,12 @@ export async function OPTIONS() {
 
 export async function POST(req: NextRequest) {
   try {
+    // Every action below rewrites an employee document row on the service role key.
+    // Stock access only. Scout never calls this route.
+    const acc = await resolveAccess(req, supabase)
+    if (!acc.ok) return NextResponse.json({ error: acc.error }, { status: acc.status, headers: CORS })
+    if (!acc.stock) return NextResponse.json({ error: 'No Stock access' }, { status: 403, headers: CORS })
+
     const body = await req.json()
     const action = body.action as string
 
