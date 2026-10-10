@@ -13,12 +13,44 @@
 //
 // So this resolves CAPABILITIES and lets each route decide what it needs.
 export type AccessResult =
-  | { ok: true; userId: string; stock: boolean; scout: boolean }
+  | { ok: true; userId: string; stock: boolean; stockManage: boolean; scout: boolean }
   | { ok: false; status: number; error: string }
 
-export async function resolveAccess(req: Request, supabase: any): Promise<AccessResult> {
+// The SSO session lives in the 'bt-auth' cookie on .buttertoast.co, chunked as
+// bt-auth.0, bt-auth.1 ... when long (see lib/supabase.ts). Only routes that are called
+// from Stock's own pages WITHOUT an Authorization header (the Drive proxy) read it. The
+// cookie is SameSite=Lax, so a cross-site POST never carries it.
+function tokenFromCookie(req: Request): string {
+  const raw = req.headers.get('cookie') || ''
+  const all: Record<string, string> = {}
+  raw.split(';').forEach(p => {
+    const i = p.indexOf('=')
+    if (i < 0) return
+    all[p.slice(0, i).trim()] = p.slice(i + 1).trim()
+  })
+  let enc = all['bt-auth']
+  if (enc === undefined) {
+    if (all['bt-auth.0'] === undefined) return ''
+    const parts: string[] = []
+    for (let i = 0; all['bt-auth.' + i] !== undefined; i++) parts.push(all['bt-auth.' + i])
+    enc = parts.join('')
+  }
+  try {
+    const session = JSON.parse(decodeURIComponent(enc))
+    return typeof session?.access_token === 'string' ? session.access_token : ''
+  } catch {
+    return ''
+  }
+}
+
+export async function resolveAccess(
+  req: Request,
+  supabase: any,
+  opts: { allowCookie?: boolean } = {}
+): Promise<AccessResult> {
   const auth = req.headers.get('authorization') || ''
-  const token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : ''
+  let token = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : ''
+  if (!token && opts.allowCookie) token = tokenFromCookie(req)
   if (!token) return { ok: false, status: 401, error: 'Sign in required' }
 
   const { data: u, error: ue } = await supabase.auth.getUser(token)
@@ -64,10 +96,13 @@ export async function resolveAccess(req: Request, supabase: any): Promise<Access
   const denied = (app: string): boolean => overrides[app] === 'none'
 
   const stock = isAdmin || (!denied('stock') && (['edit', 'manage'].includes(levelOf('stock')) || legacyHr))
+  // Template changes alter every future letter, so they need manage, matching Kitchen,
+  // where the Templates screen is shown to Stock managers only.
+  const stockManage = isAdmin || (!denied('stock') && (levelOf('stock') === 'manage' || legacyHr))
   // Scout's own front door admits 'manage' only (it maps manage to admin and refuses
   // edit), so match that exactly here rather than inventing a second rule.
   const scout = isAdmin || (!denied('scout') && (levelOf('scout') === 'manage' || legacyHr))
 
   if (!stock && !scout) return { ok: false, status: 403, error: 'No Stock or Scout access' }
-  return { ok: true, userId, stock, scout }
+  return { ok: true, userId, stock, stockManage, scout }
 }
